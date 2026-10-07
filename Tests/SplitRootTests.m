@@ -261,7 +261,10 @@ static BOOL SRTargetBytes(QHSplitRootFixture *f, NSData *expected) {
            [actual isEqual:expected];
 }
 static void SRCheckNoState(QHSplitRootFixture *f, NSString *label) {
-    SRCheck(lstat(f.state.fileSystemRepresentation, &(struct stat){0}) < 0 && errno == ENOENT, label);
+    int result = lstat(f.state.fileSystemRepresentation, &(struct stat){0});
+    // Adversarial fixtures can replace var with a regular file. There can be
+    // no state below a nondirectory; EACCES and other failures are not absence.
+    SRCheck(result < 0 && (errno == ENOENT || errno == ENOTDIR), label);
 }
 static NSDictionary *SRStatusNoSideEffects(QHSplitRootFixture *f) {
     NSDictionary *before = SRCapture(f.directory);
@@ -429,14 +432,21 @@ static void SRAdoptionContractAndBadRegulars(BOOL mixedUID) {
 
 static void SRRequireRefusal(QHSplitRootFixture *f, NSString *label) {
     NSDictionary *before = SRCapture(f.directory);
+    struct stat beforeState, afterState;
+    BOOL existed = lstat(f.state.fileSystemRepresentation, &beforeState) == 0;
+    int beforeError = errno;
     NSDictionary *status = f.status;
     SRCheck(![status[@"ok"] boolValue], label);
     SRCheck([before isEqual:SRCapture(f.directory)], @"invalid split-root layout status is read-only");
-    if ([[NSFileManager.defaultManager attributesOfItemAtPath:f.state error:NULL] fileSize] ||
-        [NSFileManager.defaultManager fileExistsAtPath:f.state]) {
-        NSLog(@"SplitRoot diagnostic %@ code=%@ statePath=%@", label, status[@"errorCode"], f.state);
+    BOOL existsAfter = lstat(f.state.fileSystemRepresentation, &afterState) == 0;
+    if (existed) {
+        SRCheck(existsAfter && beforeState.st_ino == afterState.st_ino &&
+                    beforeState.st_uid == afterState.st_uid && beforeState.st_mode == afterState.st_mode,
+                @"refusal preserves the deliberately preexisting unsafe state entry");
+    } else {
+        SRCheck(!existsAfter && (beforeError == ENOENT || beforeError == ENOTDIR),
+                @"invalid split-root layout cannot create private state");
     }
-    SRCheckNoState(f, @"invalid split-root layout cannot create private state");
     [f checkRaw];
 }
 static void SRPathAndLinkRefusals(BOOL mixedUID) {
