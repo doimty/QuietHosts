@@ -392,6 +392,24 @@ static void ValidateFP(id f) {
         }
     }
 }
+static BOOL SamePersistedTarget(NSDictionary *current, NSDictionary *persisted) {
+    if (![current isKindOfClass:NSDictionary.class] || ![persisted isKindOfClass:NSDictionary.class] ||
+        ![current[@"kind"] isEqual:persisted[@"kind"]]) {
+        return NO;
+    }
+    if ([current[@"kind"] isEqual:@"missing"]) {
+        return [current isEqual:persisted];
+    }
+    /* Darwin st_dev is a mount-instance identifier on some iOS data paths and
+     * can change across reboot while the same directory entry remains. Do not
+     * persist that volatile field as identity; retain exact inode, content,
+     * owner, mode, size, link-count and nanosecond-mtime checks. */
+    NSMutableDictionary *live = [current mutableCopy];
+    NSMutableDictionary *saved = [persisted mutableCopy];
+    [live removeObjectForKey:@"dev"];
+    [saved removeObjectForKey:@"dev"];
+    return [live isEqual:saved];
+}
 static void ValidateState(id s) {
     if (!Keys(s,
               @[
@@ -996,7 +1014,7 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
     return d;
 }
 - (void)validateContents:(NSDictionary *)state baseline:(NSData *)baseline snapshot:(NSData *)snapshot {
-    if (![state[@"system"] isEqual:_system]) {
+    if (!SamePersistedTarget(_system, state[@"system"])) {
         Fail(@"system-changed");
     }
     NSDictionary *original = state[@"original"];
@@ -1087,7 +1105,7 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
     _baseline = [self baselineForState:_state allowPending:NO];
     _snapshot = [self snapshotForState:_state];
     [self validateContents:_state baseline:_baseline snapshot:_snapshot];
-    if (![_target isEqual:_state[@"target"]]) {
+    if (!SamePersistedTarget(_target, _state[@"target"])) {
         Fail(@"target-conflict");
     }
     if (![_state[@"active"] boolValue] && ![_state[@"original"][@"kind"] isEqual:@"regular"]) {
@@ -1119,10 +1137,10 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
     }
     if ((id)before != NSNull.null) {
         ValidateState(before);
-        if (![before[@"target"] isEqual:j[@"beforeTarget"]] ||
+        if (!SamePersistedTarget(before[@"target"], j[@"beforeTarget"]) ||
             ![before[@"original"] isEqual:after[@"original"]] ||
             ![before[@"baselineHash"] isEqual:after[@"baselineHash"]] ||
-            ![before[@"system"] isEqual:after[@"system"]] ||
+            !SamePersistedTarget(before[@"system"], after[@"system"]) ||
             [before[@"revision"] isEqual:after[@"revision"]]) {
             Fail(@"journal-invalid");
         }
@@ -1138,7 +1156,8 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
         Fail(@"journal-lineage");
     }
     NSDictionary *now = Fingerprint(_etcFD, @"hosts", _owner, MaxHosts);
-    BOOL isBefore = [now isEqual:j[@"beforeTarget"]], isAfter = [now isEqual:j[@"afterTarget"]];
+    BOOL isBefore = SamePersistedTarget(now, j[@"beforeTarget"]);
+    BOOL isAfter = SamePersistedTarget(now, j[@"afterTarget"]);
     if (!isBefore && !isAfter) {
         Fail(@"recovery-conflict");
     }
@@ -1150,12 +1169,12 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
         Fail(@"journal-invalid");
     }
     if (isBefore && !isAfter && !missing &&
-        ![Fingerprint(_etcFD, tmp, _owner, MaxHosts) isEqual:j[@"afterTarget"]]) {
+        !SamePersistedTarget(Fingerprint(_etcFD, tmp, _owner, MaxHosts), j[@"afterTarget"])) {
         Fail(@"staging-conflict");
     }
     /* No writes above this line. Foreign target means preserve every artifact.
      * Replaying an already-renamed target still leaves DNS reload unconfirmed. */
-    _recovered = ![j[@"beforeTarget"] isEqual:j[@"afterTarget"]] || _recovered;
+    _recovered = !SamePersistedTarget(j[@"beforeTarget"], j[@"afterTarget"]) || _recovered;
     if (!ReadFile(_stateFD, @"original.bin", _owner, MaxBaseline, 0400, YES)) {
         [self beforeWrite:@"commit-backup"];
         if (renameat(_stateFD, "original.pending", _stateFD, "original.bin")) {
@@ -1167,8 +1186,10 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
     Fault(@"after-backup");
     if (isBefore && !isAfter) {
         [self anchors];
-        if (![Fingerprint(_rawFD, _rawName, _owner, MaxBaseline) isEqual:_system] ||
-            ![Fingerprint(_etcFD, @"hosts", _owner, MaxHosts) isEqual:j[@"beforeTarget"]]) {
+        NSDictionary *liveRaw = Fingerprint(_rawFD, _rawName, _owner, MaxBaseline);
+        NSDictionary *liveTarget = Fingerprint(_etcFD, @"hosts", _owner, MaxHosts);
+        if (![liveRaw isEqual:_system] || ![liveTarget isEqual:now] ||
+            !SamePersistedTarget(liveTarget, j[@"beforeTarget"])) {
             Fail(@"target-conflict");
         }
         [self beforeWrite:@"commit-target"];
@@ -1187,7 +1208,7 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
     [self beforeWrite:@"sync-target"];
     SyncDir(_etcFD); // also sync an already-renamed target during replay
     Fault(@"after-target");
-    if (![Fingerprint(_etcFD, @"hosts", _owner, MaxHosts) isEqual:j[@"afterTarget"]]) {
+    if (!SamePersistedTarget(Fingerprint(_etcFD, @"hosts", _owner, MaxHosts), j[@"afterTarget"])) {
         Fail(@"target-conflict");
     }
     Fault(@"recoverstate");
@@ -1267,11 +1288,12 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
             Fail(@"write-failed");
         }
         /* Verify the restored link resolves to the exact fixed raw system inode. */
+        NSDictionary *liveSystem = Fingerprint(_rawFD, _rawName, _owner, MaxBaseline);
         int f = openat(_etcFD, tmp.fileSystemRepresentation, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
         struct stat s;
         BOOL valid = f >= 0 && fstat(f, &s) == 0 && S_ISREG(s.st_mode) && s.st_uid == _owner &&
-                     (uint64_t)s.st_dev == [_system[@"dev"] unsignedLongLongValue] &&
-                     (uint64_t)s.st_ino == [_system[@"ino"] unsignedLongLongValue];
+                     (uint64_t)s.st_dev == [liveSystem[@"dev"] unsignedLongLongValue] &&
+                     (uint64_t)s.st_ino == [liveSystem[@"ino"] unsignedLongLongValue];
         if (f >= 0) {
             close(f);
         }

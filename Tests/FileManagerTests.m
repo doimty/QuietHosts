@@ -533,7 +533,119 @@ static NSDictionary *ApplyRequest(QHFixture *f) {
         @"domainCount" : @1
     };
 }
+static void PersistedMountIdentity(void) {
+    QHFixture *f = Fixture(YES);
+    NSDictionary *first = [f apply:Blocks() count:1 revision:f.status[@"revision"]];
+    Check([first[@"ok"] boolValue], @"mount-identity fixture starts active");
+    NSString *statePath = [f.state stringByAppendingPathComponent:@"state.json"];
+    NSMutableDictionary *state = [[NSJSONSerialization JSONObjectWithData:
+        [NSData dataWithContentsOfFile:statePath] options:0 error:NULL] mutableCopy];
+    NSMutableDictionary *savedTarget = [state[@"target"] mutableCopy];
+    uint64_t priorDevice = [savedTarget[@"dev"] unsignedLongLongValue];
+    savedTarget[@"dev"] = @(priorDevice + 1000000);
+    state[@"target"] = savedTarget;
+    Put(statePath, [NSJSONSerialization dataWithJSONObject:state options:0 error:NULL], 0600);
+    NSDictionary *beforeRead = Capture(f.root);
+    NSDictionary *status = f.status;
+    Check([status[@"ok"] boolValue] && [status[@"state"] isEqual:@"active"],
+          @"valid active target survives a changed mount st_dev");
+    Check([beforeRead isEqual:Capture(f.root)], @"read-only status preserves persisted metadata and targets");
+    NSData *updated = Text(@"0.0.0.0 updated.example\n::1 updated.example\n");
+    NSDictionary *result = [f apply:updated count:1 revision:status[@"revision"]];
+    Check([result[@"ok"] boolValue] && [result[@"state"] isEqual:@"active"],
+          @"apply after mount identity change succeeds");
+    Check([[NSData dataWithContentsOfFile:f.target] rangeOfData:Text(@"updated.example")
+                                                        options:0 range:NSMakeRange(0, [NSData dataWithContentsOfFile:f.target].length)].location != NSNotFound,
+          @"updated target has new rules");
+    Check([[f command:@"disable"][@"ok"] boolValue], @"disable after mount identity change succeeds");
+    Check([[NSData dataWithContentsOfFile:f.target] isEqual:Text(Original)],
+          @"disable restores exact original after mount identity change");
+}
+static void PersistedMetadataStillStrict(void) {
+    QHFixture *f = Fixture(YES);
+    Check([[f apply:Blocks() count:1 revision:f.status[@"revision"]][@"ok"] boolValue],
+          @"strict persisted metadata fixture starts active");
+    NSString *statePath = [f.state stringByAppendingPathComponent:@"state.json"];
+    NSMutableDictionary *state = [[NSJSONSerialization JSONObjectWithData:
+        [NSData dataWithContentsOfFile:statePath] options:0 error:NULL] mutableCopy];
+    NSMutableDictionary *target = [state[@"target"] mutableCopy];
+    target[@"mode"] = @(0100640);
+    state[@"target"] = target;
+    Put(statePath, [NSJSONSerialization dataWithJSONObject:state options:0 error:NULL], 0600);
+    NSDictionary *result = f.status;
+    Check(![result[@"ok"] boolValue] && [result[@"errorCode"] isEqual:@"target-conflict"],
+          @"persisted mode changes remain a target conflict");
+}
+static NSDictionary *DifferentPersistedDevice(NSDictionary *fingerprint) {
+    if ([fingerprint[@"kind"] isEqual:@"missing"]) {
+        return fingerprint;
+    }
+    NSMutableDictionary *changed = [fingerprint mutableCopy];
+    changed[@"dev"] = @([fingerprint[@"dev"] unsignedLongLongValue] + 1000000);
+    return changed;
+}
+static NSDictionary *StateWithTarget(NSDictionary *state, NSDictionary *target) {
+    if (!state || (id)state == NSNull.null) {
+        return state ?: (id)NSNull.null;
+    }
+    NSMutableDictionary *changed = [state mutableCopy];
+    changed[@"target"] = target;
+    return changed;
+}
+static void PersistedJournalMountIdentity(void) {
+    NSArray *points = @[ @"after-journal", @"after-rename-before-sync" ];
+    for (NSString *point in points) {
+        @autoreleasepool {
+            QHFixture *f = Fixture(YES);
+            Check([[f apply:Blocks() count:1 revision:f.status[@"revision"]][@"ok"] boolValue],
+                  @"journal mount-identity fixture starts active");
+            NSString *statePath = [f.state stringByAppendingPathComponent:@"state.json"];
+            NSMutableDictionary *preRebootState = [[NSJSONSerialization JSONObjectWithData:
+                [NSData dataWithContentsOfFile:statePath] options:0 error:NULL] mutableCopy];
+            preRebootState[@"target"] = DifferentPersistedDevice(preRebootState[@"target"]);
+            preRebootState[@"system"] = DifferentPersistedDevice(preRebootState[@"system"]);
+            Put(statePath, [NSJSONSerialization dataWithJSONObject:preRebootState options:0 error:NULL], 0600);
+            NSDictionary *preRebootStatus = f.status;
+            Check([preRebootStatus[@"ok"] boolValue] && [preRebootStatus[@"state"] isEqual:@"active"],
+                  @"journal fixture accepts persisted mount identity change before new transaction");
+            NSData *updated = Text(@"0.0.0.0 updated.example\n::1 updated.example\n");
+            Crash(f, @"apply", @{ @"expectedRevision" : preRebootStatus[@"revision"],
+                                   @"hostsBase64" : [updated base64EncodedStringWithOptions:0],
+                                   @"domainCount" : @1 }, point);
+            NSString *journalPath = [f.state stringByAppendingPathComponent:@"journal.json"];
+            NSMutableDictionary *journal = [[NSJSONSerialization JSONObjectWithData:
+                [NSData dataWithContentsOfFile:journalPath] options:0 error:NULL] mutableCopy];
+            NSDictionary *beforeTarget = DifferentPersistedDevice(journal[@"beforeTarget"]);
+            NSDictionary *afterTarget = DifferentPersistedDevice(journal[@"afterTarget"]);
+            journal[@"beforeTarget"] = beforeTarget;
+            journal[@"afterTarget"] = afterTarget;
+            journal[@"before"] = StateWithTarget(journal[@"before"], beforeTarget);
+            journal[@"after"] = StateWithTarget(journal[@"after"], afterTarget);
+            NSMutableDictionary *diskState = [[NSJSONSerialization JSONObjectWithData:
+                [NSData dataWithContentsOfFile:statePath] options:0 error:NULL] mutableCopy];
+            diskState[@"target"] = beforeTarget;
+            Put(statePath, [NSJSONSerialization dataWithJSONObject:diskState options:0 error:NULL], 0600);
+            Put(journalPath, [NSJSONSerialization dataWithJSONObject:journal options:0 error:NULL], 0600);
+            NSDictionary *recovered = f.status;
+            Check([recovered[@"ok"] boolValue] && [recovered[@"state"] isEqual:@"active"] &&
+                      [recovered[@"domainCount"] unsignedIntegerValue] == 1,
+                  [NSString stringWithFormat:@"%@ journal recovers when mount st_dev changes", point]);
+            Check(![NSFileManager.defaultManager fileExistsAtPath:journalPath],
+                  @"recovered cross-mount journal is cleared");
+            Check([[NSData dataWithContentsOfFile:f.target] isEqual:Text([Original stringByAppendingString:
+                [[NSString alloc] initWithData:updated encoding:NSUTF8StringEncoding]])],
+                  @"journal replay preserves exact baseline plus new snapshot");
+            Check([[f command:@"disable"][@"ok"] boolValue], @"cross-mount recovered state remains reversible");
+            Check([[NSData dataWithContentsOfFile:f.target] isEqual:Text(Original)],
+                  @"cross-mount recovered disable restores original");
+            [f checkRaw];
+        }
+    }
+}
 static void CrashRecovery(void);
+static void PersistedMountIdentity(void);
+static void PersistedMetadataStillStrict(void);
+static void PersistedJournalMountIdentity(void);
 static void DirectoryLayouts(void);
 static void DirectoryLayoutRefusals(void);
 static void DirectoryLayoutRaces(void);
@@ -552,6 +664,9 @@ NSUInteger RunFileManagerTests(void) {
     }
     @autoreleasepool {
         CrashRecovery();
+        PersistedMountIdentity();
+        PersistedMetadataStillStrict();
+        PersistedJournalMountIdentity();
         DirectoryLayouts();
         DirectoryLayoutRefusals();
         DirectoryLayoutRaces();

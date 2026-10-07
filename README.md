@@ -1,8 +1,8 @@
 # 静域 / QuietHosts
 
-Native UIKit Hosts source manager for iOS 15+ RootHide. Candidate `0.1.0-1+native3`; installation and device behavior still require separate acceptance.
+Native UIKit Hosts source manager for iOS 15+ RootHide. Candidate `0.1.0-1+native4`; installation and device behavior still require separate acceptance.
 
-Native3 candidate adds three bounded fixes: root credentials only inside the fixed one-shot DNS reload child (with sanitized diagnostic codes); conversion of exact Surge `DOMAIN` block rules only; and document-picker gesture-dismissal cancellation guarded against stale callbacks. It does not flatten suffix, keyword, IP-range or URL rules. See `docs/NATIVE3.md` for scope and validation boundaries.
+Native4 fixes a reboot false-positive: persisted fingerprint checks no longer treat Darwin's mount-instance `st_dev` as a durable file identity, while content hash, inode, ownership, mode, size, link count and nanosecond timestamps remain strict. It also retains native3's DNS reload child credentials, exact Surge `DOMAIN` conversion, and document-picker gesture-dismissal cancellation. See `docs/NATIVE4.md` for scope and validation boundaries.
 
 Native2 adapts the verified split-root layout: primary root and paired routing var may be UID501, protected etc/private/paired-root/lib/state must retain the expected root ownership. Paired paths and backlink are independently derived and checked, not arbitrary symlink targets. Only a regular file containing the three conventional localhost/broadcasthost mappings becomes eligible for **explicit backup-and-adopt confirmation**; its exact original bytes, owner/group and mode are restored on Disable. Other regular files remain conflicts. Error codes are shown on Home, error dialogs and Advanced information.
 
