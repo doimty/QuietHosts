@@ -468,7 +468,8 @@ static void SRPathAndLinkRefusals(BOOL mixedUID) {
         NSString *foreign = [f.directory stringByAppendingPathComponent:@"foreign-var"];
         SRDirectory(foreign, 0755, mixedUID ? (uid_t)501 : f.expectedOwner,
                     mixedUID ? (gid_t)501 : f.expectedGroup);
-        SRRequire(rmdir(var.fileSystemRepresentation) == 0);
+        NSString *originalVar = [f.directory stringByAppendingPathComponent:@"original-paired-var"];
+        SRRequire(rename(var.fileSystemRepresentation, originalVar.fileSystemRepresentation) == 0);
         SRRequire(symlink(foreign.fileSystemRepresentation, var.fileSystemRepresentation) == 0);
         SRRequireRefusal(f, @"paired var symlink is rejected even when its target is a safe directory");
     }
