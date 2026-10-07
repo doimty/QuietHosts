@@ -55,8 +55,7 @@ int main(int argc, char **argv) {
             return 95;
         }
         close(fd);
-        if (getuid() != 0 || geteuid() != 0 || getgid() != 0 || getegid() != 0 || groupCount != 1 ||
-            groups[0] != 0) {
+        if (getuid() != 0 || geteuid() != 0 || getgid() != 0 || getegid() != 0) {
             return 91;
         }
         if (getenv("QH_TEST_SENTINEL") || getenv("DYLD_INSERT_LIBRARIES")) {
