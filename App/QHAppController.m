@@ -1,6 +1,7 @@
 #import "QHAppController.h"
 #import "QHStore.h"
 #import "QHDownload.h"
+#include "QHImportLifecycle.h"
 #import "../Shared/QHBridge.h"
 #import "../Shared/QHLocalization.h"
 #import "../Shared/QHStatusPresentation.h"
@@ -191,7 +192,7 @@ static BOOL Animate(void) {
 }
 @end
 
-@interface QHAppController () <UIDocumentPickerDelegate>
+@interface QHAppController () <UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate>
 @property(nonatomic, readwrite, strong) UITabBarController *rootController;
 @property(nonatomic, strong) NSArray<QHPage *> *pages;
 @property(nonatomic, strong) QHStore *store;
@@ -203,12 +204,15 @@ static BOOL Animate(void) {
 @property(nonatomic) BOOL busy;
 @property(nonatomic) BOOL pendingStatus;
 @property(nonatomic) BOOL pickingAllowlist;
+@property(nonatomic, strong) UIDocumentPickerViewController *filePicker;
 @property(nonatomic, strong) QHDownload *download;
 @property(nonatomic) int notificationToken;
 @property(nonatomic) BOOL observing;
 @end
 
-@implementation QHAppController
+@implementation QHAppController {
+    QHImportLifecycle _fileImport;
+}
 - (instancetype)init {
     if ((self = [super init])) {
         _store = [QHStore new];
@@ -488,6 +492,10 @@ static BOOL Animate(void) {
                                                                   Number(result.domains.count),
                                                                   Number([source[@"data"] length])],
                                        UIFontTextStyleSubheadline, NO)];
+        NSUInteger skipped = [result.statistics[@"unsupported"] unsignedIntegerValue];
+        if (skipped) {
+            [card addArrangedSubview:Label([NSString stringWithFormat:QHL(@"%@ rules cannot be represented by Hosts and were skipped. Exact DOMAIN records are converted; suffix, keyword, IP-range and URL rules are not."), Number(skipped)], UIFontTextStyleFootnote, YES)];
+        }
         [card addArrangedSubview:Button(QHL(@"Remove from local draft"), NO, !self.busy, ^{
                   [weak removeSource:identifier];
               })];
@@ -821,8 +829,7 @@ static BOOL Animate(void) {
                          message:allowlist
                                      ? QHL(@"Replace the entire allowlist. Every nonempty line must be an "
                                            @"exact domain; any invalid entry rejects the whole change.")
-                                     : QHL(@"Only Hosts blocking records and bare domains are supported. "
-                                           @"Preview before saving. Large lists should be imported as files.")
+                                     : QHL(@"Hosts, bare domains and exact Surge DOMAIN records are supported. Preview before saving. Suffix, keyword, IP-range and URL rules cannot be expressed by Hosts and are skipped. Large lists should be imported as files.")
                   preferredStyle:UIAlertControllerStyleActionSheet];
     if (!allowlist) {
         [alert addAction:[UIAlertAction actionWithTitle:QHL(@"HTTPS URL")
@@ -941,39 +948,70 @@ static BOOL Animate(void) {
         [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[ UTTypeData ] asCopy:NO];
     picker.delegate = self;
     picker.allowsMultipleSelection = NO;
-    [self.rootController presentViewController:picker animated:Animate() completion:nil];
+    self.filePicker = picker;
+    QHImportBegin(&_fileImport, (__bridge const void *)picker);
+    // A swipe dismissal on iOS15 need not send documentPickerWasCancelled.
+    picker.presentationController.delegate = self;
+    __weak typeof(self) weak = self;
+    [self.rootController presentViewController:picker animated:Animate() completion:^{
+        if (weak.filePicker == picker) picker.presentationController.delegate = weak;
+    }];
+}
+- (void)cancelFilePicker:(UIDocumentPickerViewController *)picker {
+    if (!QHImportCancel(&_fileImport, (__bridge const void *)picker)) return;
+    self.filePicker = nil;
+    self.pickingAllowlist = NO;
+    [self finishBusy];
 }
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
-    (void)controller;
-    [self finishBusy];
+    [self cancelFilePicker:controller];
+}
+- (void)presentationControllerDidDismiss:(UIPresentationController *)presentationController {
+    UIViewController *dismissed = presentationController.presentedViewController;
+    if ([dismissed isKindOfClass:UIDocumentPickerViewController.class]) {
+        [self cancelFilePicker:(UIDocumentPickerViewController *)dismissed];
+    }
 }
 - (void)documentPicker:(UIDocumentPickerViewController *)controller
     didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
-    (void)controller;
-    NSURL *url = urls.firstObject;
+    NSURL *url = urls.count == 1 ? urls.firstObject : nil;
+    if (!url) { [self cancelFilePicker:controller]; return; }
+    uint64_t generation = QHImportSelect(&_fileImport, (__bridge const void *)controller);
+    if (!generation) return; // stale selection after cancellation/new picker
     BOOL allowlist = self.pickingAllowlist;
+    self.pickingAllowlist = NO;
+    self.filePicker = nil;
     __weak typeof(self) weak = self;
-    if (!url) {
-        [self finishBusy];
-        return;
-    }
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSError *error = nil;
-        NSData *data = [QHStore readImportURL:url error:&error];
-        NSString *name = url.lastPathComponent;
-        if (!name.length || name.length > 120 ||
-            [name rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound) {
-            name = QHL(@"Local file");
-        }
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (!data) {
-                [weak finishBusy];
-                [weak message:QHL(@"Nothing saved") detail:error.localizedDescription];
-                return;
+    void (^readSelectedFile)(void) = ^{
+        QHAppController *owner = weak;
+        if (!owner || !QHImportIsReading(&owner->_fileImport, generation)) return;
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            NSError *error = nil;
+            NSData *data = [QHStore readImportURL:url error:&error];
+            NSString *name = url.lastPathComponent;
+            if (!name.length || name.length > 120 ||
+                [name rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound) {
+                name = QHL(@"Local file");
             }
-            [weak stageData:data kind:@"file" name:name URL:nil allowlist:allowlist];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                QHAppController *current = weak;
+                if (!current || !QHImportFinishRead(&current->_fileImport, generation)) return;
+                if (!data) {
+                    [current finishBusy];
+                    [current message:QHL(@"Nothing saved") detail:error.localizedDescription];
+                    return;
+                }
+                [current stageData:data kind:@"file" name:name URL:nil allowlist:allowlist];
+            });
         });
-    });
+    };
+    // Mark Reading BEFORE dismissal: its late dismiss/cancel callback must not
+    // unlock buttons while the selected file is being validated off-main.
+    if (controller.presentingViewController) {
+        [controller dismissViewControllerAnimated:Animate() completion:readSelectedFile];
+    } else {
+        readSelectedFile();
+    }
 }
 - (void)editText:(BOOL)allowlist {
     QHEditor *editor = [QHEditor new];
@@ -1210,6 +1248,9 @@ static BOOL Animate(void) {
     } else if (result[@"reloadError"]) {
         detail = QHL(@"Files were saved, but the DNS reload request failed. This is not proof of protection. "
                      @"Review dependencies and check file state; apps may retain DNS caches.");
+        detail = [detail stringByAppendingFormat:@"\n\n%@",
+            [NSString stringWithFormat:QHL(@"DNS reload diagnostic: %@"),
+                QHStatusErrorCode(@{@"errorCode":result[@"reloadError"]})]];
     } else if ([result[@"reloadRequested"] boolValue]) {
         detail = QHL(@"Files were saved and DNS reload was requested. This does not verify DNS filtering or "
                      @"clear every app's cache.");

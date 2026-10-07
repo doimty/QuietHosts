@@ -2,6 +2,7 @@ import pathlib,subprocess,sys,tempfile,os
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 def run(args):subprocess.run(args,cwd=ROOT,check=True)
 run([sys.executable,'scripts/test_parser.py',*(['--sanitize'] if sys.platform=='darwin' else [])])
+run([sys.executable,'scripts/test_regressions.py'])
 run([sys.executable,'scripts/check_localization.py'])
 run([sys.executable,'scripts/test_directory_policy.py'])
 with tempfile.TemporaryDirectory(prefix='qh-process-') as d:

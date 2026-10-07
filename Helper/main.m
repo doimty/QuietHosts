@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import "QHFileManager.h"
+#include "QHDNSReload.h"
 #import <roothide.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -114,7 +115,7 @@ static NSDictionary *ReadRequest(BOOL optional, NSString **failure) {
 
 /* Fixed executable + fixed arguments + fixed environment only. There is no
  * general process runner here and no caller-supplied path/argument expansion. */
-static NSString *RestartDNS(void) {
+static NSString *RestartDNS(QHDNSReloadResult *diagnostic) {
     const char *mapped = jbroot("/usr/bin/killall");
     if (!mapped || mapped[0] != '/') {
         return @"reload-unavailable";
@@ -129,72 +130,20 @@ static NSString *RestartDNS(void) {
         free(path);
         return @"reload-unavailable";
     }
-    posix_spawn_file_actions_t actions;
-    posix_spawnattr_t attr;
-    if (posix_spawn_file_actions_init(&actions)) {
-        free(path);
-        return @"reload-spawn-failed";
-    }
-    if (posix_spawnattr_init(&attr)) {
-        posix_spawn_file_actions_destroy(&actions);
-        free(path);
-        return @"reload-spawn-failed";
-    }
-    int e = posix_spawnattr_setflags(&attr,
-                                     POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF);
-    if (!e) {
-        e = posix_spawnattr_setpgroup(&attr, 0);
-    }
-    sigset_t empty, defaults;
-    sigemptyset(&empty);
-    sigemptyset(&defaults);
-    sigaddset(&defaults, SIGPIPE);
-    sigaddset(&defaults, SIGALRM);
-    if (!e) {
-        e = posix_spawnattr_setsigmask(&attr, &empty);
-    }
-    if (!e) {
-        e = posix_spawnattr_setsigdefault(&attr, &defaults);
-    }
-    for (int fd = 0; fd <= 2 && !e; fd++) {
-        e = posix_spawn_file_actions_addopen(&actions, fd, "/dev/null", fd == 0 ? O_RDONLY : O_WRONLY, 0);
-    }
-    char *const argv[] = {path, "-9", "mDNSResponder", "mDNSResponderHelper", NULL};
-    char *const environment[] = {"PATH=/usr/bin:/bin", "LANG=C", "LC_ALL=C", NULL};
-    pid_t pid = -1;
-    if (!e) {
-        e = posix_spawn(&pid, path, &actions, &attr, argv, environment);
-    }
-    posix_spawnattr_destroy(&attr);
-    posix_spawn_file_actions_destroy(&actions);
+    *diagnostic = QHRunDNSReload(path, 15, &DNSChild);
     free(path);
-    if (e) {
-        return @"reload-spawn-failed";
+    switch (diagnostic->stage) {
+        case QHDNSReloadOK: return nil;
+        case QHDNSReloadCredentials: return @"reload-credentials-failed";
+        case QHDNSReloadPrepare:
+        case QHDNSReloadFork: return @"reload-spawn-failed";
+        case QHDNSReloadExec: return @"reload-exec-failed";
+        case QHDNSReloadWait: return @"reload-wait-failed";
+        case QHDNSReloadTimeout: return @"reload-timeout";
+        case QHDNSReloadExit:
+        case QHDNSReloadSignal: return @"reload-exit-failed";
     }
-    DNSChild = (sig_atomic_t)pid;
-    double deadline = Monotonic() + 15;
-    int status = 0;
-    for (;;) {
-        pid_t result = waitpid(pid, &status, WNOHANG);
-        if (result == pid) {
-            DNSChild = 0;
-            return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? nil : @"reload-exit-failed";
-        }
-        if (result < 0 && errno != EINTR) {
-            DNSChild = 0;
-            return @"reload-wait-failed";
-        }
-        if (Monotonic() >= deadline) {
-            kill(-pid, SIGKILL);
-            kill(pid, SIGKILL);
-            /* Reap under the whole-process watchdog; no unbounded service wait. */
-            while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
-            }
-            DNSChild = 0;
-            return @"reload-timeout";
-        }
-        poll(NULL, 0, 20);
-    }
+    return @"reload-exit-failed";
 }
 
 static int Emit(NSDictionary *result) {
@@ -277,11 +226,15 @@ int main(int argc, char *argv[]) {
             NSMutableDictionary *result = [[manager handleCommand:command request:request] mutableCopy];
             BOOL changed = [result[@"changed"] boolValue];
             if (!status && (changed || ([result[@"ok"] boolValue] && [command isEqual:@"reload"]))) {
-                NSString *reloadError = RestartDNS();
+                QHDNSReloadResult reload = {QHDNSReloadPrepare, 0, -1, 0};
+                NSString *reloadError = RestartDNS(&reload);
                 result[@"reloadRequested"] = @(reloadError == nil);
                 result[@"reloadPending"] = @(reloadError != nil);
                 if (reloadError) {
                     result[@"reloadError"] = reloadError; // files remain committed, no false rollback
+                    result[@"reloadErrno"] = @(reload.systemError);
+                    result[@"reloadExitStatus"] = @(reload.exitStatus);
+                    result[@"reloadSignal"] = @(reload.termSignal);
                 }
             }
             if (changed) {

@@ -130,6 +130,69 @@ bool QHLocalDomain(const char *name) {
     return length > 10 && strcmp(name + length - 10, ".localhost") == 0;
 }
 
+/* Recognize only exact Surge DOMAIN records in a block source. Untagged
+ * rule-set records and explicit REJECT/REJECT-DROP are accepted; DIRECT,
+ * proxy policies, extra options and non-exact forms are never reinterpreted.
+ * Return 0=other syntax, 1=domain span, -1=unsupported DOMAIN action/options. */
+static bool EqualASCII(const unsigned char *p, size_t n, const char *word) {
+    if (n != strlen(word)) {
+        return false;
+    }
+    for (size_t i = 0; i < n; i++) {
+        unsigned char c = p[i];
+        if (c >= 'a' && c <= 'z') {
+            c = (unsigned char)(c - ('a' - 'A'));
+        }
+        if (c != (unsigned char)word[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+static int SurgeExactDomain(const unsigned char *p, size_t n, const unsigned char **name, size_t *length) {
+    size_t comma = 0;
+    while (comma < n && p[comma] != ',') {
+        comma++;
+    }
+    if (comma == n) {
+        return 0;
+    }
+    size_t typeEnd = comma;
+    while (typeEnd && Space(p[typeEnd - 1])) {
+        typeEnd--;
+    }
+    if (!EqualASCII(p, typeEnd, "DOMAIN")) {
+        return 0;
+    }
+    size_t start = comma + 1, end = start;
+    while (end < n && p[end] != ',') {
+        end++;
+    }
+    size_t next = end;
+    while (start < end && Space(p[start])) {
+        start++;
+    }
+    while (end > start && Space(p[end - 1])) {
+        end--;
+    }
+    if (next < n) {
+        size_t actionStart = next + 1, actionEnd = n;
+        while (actionStart < actionEnd && Space(p[actionStart])) {
+            actionStart++;
+        }
+        while (actionEnd > actionStart && Space(p[actionEnd - 1])) {
+            actionEnd--;
+        }
+        if (!EqualASCII(p + actionStart, actionEnd - actionStart, "REJECT") &&
+            !EqualASCII(p + actionStart, actionEnd - actionStart, "REJECT-DROP")) {
+            return -1;
+        }
+    }
+    *name = p + start;
+    *length = end - start;
+    return 1;
+}
+
 static bool Unsupported(const unsigned char *p, size_t n) {
     static const char *const keywords[] = {"DOMAIN",  "DOMAIN-SUFFIX", "DOMAIN-KEYWORD",
                                            "IP-CIDR", "IP-CIDR6",      "IPCIDR"};
@@ -262,6 +325,24 @@ QHParseStatus QHParserParse(const unsigned char *bytes, size_t length, bool allo
         if (start == end) {
             stats->ignoredLines++;
             continue;
+        }
+        if (!allowlist) {
+            const unsigned char *domain = NULL;
+            size_t domainLength = 0;
+            int surge = SurgeExactDomain(bytes + start, end - start, &domain, &domainLength);
+            if (surge < 0) {
+                stats->unsupported++;
+                if (!stats->firstRejectedLine) {
+                    stats->firstRejectedLine = stats->lines;
+                }
+                continue;
+            }
+            if (surge > 0) {
+                if (!EmitName(domain, domainLength, consumer, context, stats)) {
+                    return QHParseConsumerStopped;
+                }
+                continue;
+            }
         }
         size_t tokenEnd = start;
         while (tokenEnd < end && !Space(bytes[tokenEnd])) {

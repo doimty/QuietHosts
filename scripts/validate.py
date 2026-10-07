@@ -24,9 +24,9 @@ def macho(path):
 def main():
  p=argparse.ArgumentParser();p.add_argument('--stage',type=pathlib.Path);a=p.parse_args();check_locale()
  c=dict(x.split(': ',1) for x in (ROOT/'control').read_text().splitlines() if ': 'in x)
- require(c['Package']=='com.doimty.quiethosts' and c['Version']=='0.1.0-1+native2','Package identity mismatch')
+ require(c['Package']=='com.doimty.quiethosts' and c['Version']=='0.1.0-1+native3','Package identity mismatch')
  for folder in ('App','Module'):
-  info=plist(ROOT/folder/'Resources/Info.plist');require(info['MinimumOSVersion']=='15.0','Wrong deployment target');require(info['CFBundleLocalizations']==['en','zh-Hans'],'Locales missing')
+  info=plist(ROOT/folder/'Resources/Info.plist');require(info['MinimumOSVersion']=='15.0','Wrong deployment target');require(info['CFBundleVersion']=='3','Wrong bundle build number');require(info['CFBundleLocalizations']==['en','zh-Hans'],'Locales missing')
  for name in ('postinst','prerm','postrm'):
   text=(ROOT/'layout/DEBIAN'/name).read_text();require('rm 'not in text and 'cp 'not in text,'Unsafe maintainer file operation')
  require('restore-for-uninstall' in (ROOT/'layout/DEBIAN/prerm').read_text(),'No checked removal')

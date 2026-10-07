@@ -66,11 +66,11 @@ static void grammar(void) {
               "1.2.3.4\nsingle\n-bad.example\nbad-.example\na..example\na.example..\n中文.example\n"
               "a.example b.example\n0.0.0.0\nwww.exact.example\nxn--fiqs8s.example\n",
               &sink);
-    assert(sink.count == 9 && stats.acceptedNames == 9);
+    assert(sink.count == 10 && stats.acceptedNames == 10);
     assert(stats.localNames == 4 && stats.redirectLines == 2);
-    assert(stats.invalidLines == 6 && stats.invalidNames == 7 && stats.unsupported == 8);
-    assert(!strcmp(sink.names[7], "www.exact.example"));
-    assert(!strcmp(sink.names[8], "xn--fiqs8s.example"));
+    assert(stats.invalidLines == 6 && stats.invalidNames == 7 && stats.unsupported == 7);
+    assert(!strcmp(sink.names[9 - 1], "www.exact.example"));
+    assert(!strcmp(sink.names[10 - 1], "xn--fiqs8s.example"));
     sink = (Sink){0};
     stats = parse("DOMAIN-SUFFIX example.com\ndomain-keyword ad\nIPCIDR 1.2.3.0/24\n", &sink);
     assert(stats.unsupported == 3 && stats.invalidLines == 0 && sink.count == 0);
@@ -99,6 +99,32 @@ static void grammar(void) {
     assert(!QHStrictInetPton(AF_INET, "01.2.3.4", address));
     assert(!QHStrictInetPton(AF_INET6, "::ffff:01.2.3.4", address));
     assert(!QHStrictInetPton(AF_INET6, "::1%en0", address));
+}
+static void surge_exact(void) {
+    Sink sink = {0};
+    QHParserStats s = parse("DOMAIN,Ads.Example.\n domain , second.example , REJECT\n"
+                            "DOMAIN,third.example,REJECT-DROP # comment\n0.0.0.0 ads.example\n",
+                            &sink);
+    assert(sink.count == 4 && s.acceptedNames == 4 && !s.unsupported && !s.invalidNames);
+    assert(!strcmp(sink.names[0], "ads.example") && !strcmp(sink.names[1], "second.example"));
+    assert(!strcmp(sink.names[2], "third.example") && !strcmp(sink.names[3], "ads.example"));
+    sink = (Sink){0};
+    s = parse("DOMAIN,safe.example,DIRECT\nDOMAIN,proxy.example,Proxy\n"
+              "DOMAIN,bad.example,REJECT,no-resolve\nDOMAIN=not-official.example\n"
+              "DOMAIN-SUFFIX,root.example\nDOMAIN-KEYWORD,ads\nURL-REGEX,^https://example/path\n"
+              "IP-CIDR,192.0.2.0/24\nDOMAIN,*.wild.example\n"
+              "DOMAIN,,REJECT\nDOMAIN,1.2.3.4\nDOMAIN,localhost\n",
+              &sink);
+    assert(!sink.count && s.unsupported == 9 && s.invalidNames == 2 && s.localNames == 1);
+    unsigned char bad[] = "DOMAIN,safe.example\n#\xff";
+    QHParserStats stats;
+    assert(QHParserParse(bad, sizeof(bad) - 1, false, consume, &sink, &stats) == QHParseInvalidEncoding);
+    assert(!sink.count && !stats.acceptedNames);
+    sink.stop = true;
+    const char *abortText = "DOMAIN,abort.example\nDOMAIN,next.example\n";
+    assert(QHParserParse((const unsigned char *)abortText, strlen(abortText), false, consume, &sink,
+                         &stats) == QHParseConsumerStopped);
+    assert(sink.count == 1 && stats.firstRejectedLine == 1);
 }
 static void allowlist(void) {
     const char *invalid[] = {"0.0.0.0 a.example", "127.0.0.1",        "https://a.example",
@@ -152,6 +178,7 @@ static void bounds(void) {
 int main(void) {
     encoding();
     grammar();
+    surge_exact();
     allowlist();
     bounds();
     puts("ParserTests: PASS (encoding, grammar, allowlist, limits, immutability)");

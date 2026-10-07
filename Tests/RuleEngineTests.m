@@ -77,9 +77,18 @@ static void Basic(void) {
               [stats.statistics[@"redirects"] integerValue] == 1 &&
               [stats.statistics[@"invalidNames"] integerValue] == 2 &&
               [stats.statistics[@"invalidLines"] integerValue] == 0 &&
-              [stats.statistics[@"unsupported"] integerValue] == 1 &&
-              [stats.statistics[@"unique"] integerValue] == 1,
+              [stats.statistics[@"unsupported"] integerValue] == 0 &&
+              [stats.statistics[@"unique"] integerValue] == 2,
           @"distinct rejection counts");
+}
+static void SurgeExactRules(void) {
+    QHParseResult *source = Rules(@"DOMAIN,Ads.Example.\nDOMAIN,b.example,REJECT\nDOMAIN,safe.example,DIRECT\nDOMAIN-SUFFIX,root.example\nDOMAIN-KEYWORD,ad\n");
+    Check(source.domains.count == 2 && [source.statistics[@"unsupported"] integerValue] == 3, @"exact Surge records only; no policy/suffix/keyword flattening");
+    QHCompiledRules *compiled = QHCompileDomains(@[source], [NSSet setWithObject:@"ads.example"], NULL);
+    Check(compiled.domains.count == 1 && [compiled.domains.firstObject isEqual:@"b.example"], @"converted exact domain passes through normal allowlist");
+    Check([compiled.hostsData isEqual:UTF8(@"0.0.0.0 b.example\n::1 b.example\n")], @"converted record emits canonical dual-address block only");
+    QHParseResult *partial = Rules(@"DOMAIN,a.example\n0.0.0.0 a.example\n");
+    Check(partial.domains.count == 1 && [partial.statistics[@"duplicates"] integerValue] == 1, @"cross-format duplicates removed");
 }
 static void InvalidDocuments(void) {
     NSArray *bad = @[
@@ -181,6 +190,7 @@ NSUInteger RunRuleEngineTests(void) {
     failures = 0;
     @autoreleasepool {
         Basic();
+        SurgeExactRules();
         InvalidDocuments();
     }
     @autoreleasepool {
