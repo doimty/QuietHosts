@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+case "${1:-}" in
+ remove|deconfigure)
+  # RootHide bootstrap paths are jbroot-based. The helper verifies ownership,
+  # journal and target fingerprint. Never silently force removal on conflict.
+  /usr/libexec/quiethosts-helper restore-for-uninstall </dev/null || {
+   echo 'QuietHosts: checked restore failed. Resolve the file conflict before uninstalling.' >&2
+   exit 1
+  }
+  ;;
+esac

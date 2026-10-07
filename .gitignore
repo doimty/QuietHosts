@@ -1,0 +1,6 @@
+.theos/
+packages/
+build-metadata/
+__pycache__/
+*.pyc
+.DS_Store

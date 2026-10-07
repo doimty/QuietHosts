@@ -1,0 +1,69 @@
+name: QuietHosts native roothide
+on:
+  push:
+    branches: [feat/native-app]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quiethosts-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install build utilities
+        run: |
+          set -eu
+          for formula in make ldid xz dpkg; do brew list --versions "$formula" >/dev/null || brew install "$formula"; done
+          echo "THEOS=$RUNNER_TEMP/theos" >> "$GITHUB_ENV"
+          echo "QH_INPUTS=$RUNNER_TEMP/qh-inputs" >> "$GITHUB_ENV"
+      - name: Run production host and native fixture tests
+        run: |
+          set -euo pipefail
+          mkdir -p build-metadata
+          python3 scripts/test.py 2>&1 | tee build-metadata/tests.txt
+          python3 scripts/validate.py
+          git diff --check
+      - name: Prepare pinned toolchain only
+        run: python3 ci/prepare.py --theos "$THEOS" --work "$QH_INPUTS"
+      - name: Build app, restricted helper and CC module
+        run: |
+          set -euo pipefail
+          chmod 755 layout/DEBIAN/postinst layout/DEBIAN/prerm layout/DEBIAN/postrm
+          gmake clean package THEOS_PACKAGE_SCHEME=roothide FINALPACKAGE=1 messages=yes 2>&1 | tee build-metadata/build.txt
+      - name: Validate package and signed entitlements
+        run: |
+          set -euo pipefail
+          deb=packages/com.doimty.quiethosts_0.1.0-1+native1_iphoneos-arm64e.deb
+          test -f "$deb"
+          mkdir -p "$RUNNER_TEMP/qh-package"
+          dpkg-deb -x "$deb" "$RUNNER_TEMP/qh-package"
+          dpkg-deb -e "$deb" "$RUNNER_TEMP/qh-package/DEBIAN"
+          python3 scripts/validate.py --stage "$RUNNER_TEMP/qh-package" | tee build-metadata/package.txt
+          ldid -e "$RUNNER_TEMP/qh-package/Applications/QuietHosts.app/QuietHosts" > build-metadata/app-entitlements.plist
+          ldid -e "$RUNNER_TEMP/qh-package/usr/libexec/quiethosts-helper" > build-metadata/helper-entitlements.plist
+          python3 scripts/check_entitlements.py build-metadata/app-entitlements.plist App/Entitlements.plist
+          python3 scripts/check_entitlements.py build-metadata/helper-entitlements.plist Helper/Entitlements.plist
+          shasum -a 256 "$deb" > build-metadata/SHA256SUMS
+      - name: Preserve build identity
+        if: always()
+        run: |
+          mkdir -p build-metadata
+          git rev-parse HEAD > build-metadata/source-commit.txt
+          xcodebuild -version > build-metadata/xcode.txt
+          if test -f "$QH_INPUTS/inputs.json"; then cp "$QH_INPUTS/inputs.json" build-metadata/; fi
+      - name: Upload candidate and evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: quiethosts-native-${{ github.run_id }}
+          path: |
+            packages/*.deb
+            build-metadata/
+          if-no-files-found: error
+          retention-days: 30
