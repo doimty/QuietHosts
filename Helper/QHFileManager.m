@@ -1,4 +1,5 @@
 #import "QHFileManager.h"
+#include "QHDirectoryPolicy.h"
 #import "../Shared/QHRuleEngine.h"
 #import <CommonCrypto/CommonDigest.h>
 #include <sys/stat.h>
@@ -19,6 +20,14 @@ static const NSUInteger MaxMetadata = 64u * 1024u;
 static NSString *const FailureName = @"QHTransactionFailure";
 #ifdef QH_TESTING
 static NSString *FaultPoint;
+static NSString *DirectoryMutationPoint;
+static void (^DirectoryMutation)(void);
+/* Private test seam: mutate a fixture immediately before an anchored write.
+ * Unlike crash fault injection this runs once, without terminating the child. */
+void QHSetDirectoryMutationHook(NSString *point, void (^mutation)(void)) {
+    DirectoryMutationPoint = [point copy];
+    DirectoryMutation = [mutation copy];
+}
 void QHSetTransactionFault(NSString *point) {
     FaultPoint = [point copy];
 }
@@ -42,6 +51,59 @@ static NSString *Digest(NSData *data) {
         snprintf(text + i * 2, 3, "%02x", bytes[i]);
     }
     return [NSString stringWithUTF8String:text];
+}
+/* Only the exact three conventional localhost mappings are eligible for an
+ * explicitly confirmed takeover. Comments and whitespace are inert; no other
+ * address, hostname, malformed row, NUL, or non-UTF8 byte is tolerated. */
+static BOOL EligibleDefaultHosts(NSData *data) {
+    if (![data isKindOfClass:NSData.class] || data.length > MaxBaseline ||
+        memchr(data.bytes, 0, data.length)) {
+        return NO;
+    }
+    NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    if (!text) {
+        return NO;
+    }
+    NSUInteger seen = 0;
+    for (NSString *line in [text componentsSeparatedByString:@"\n"]) {
+        NSString *body = [[line componentsSeparatedByString:@"#"] firstObject];
+        NSMutableArray *tokens = [NSMutableArray array];
+        for (NSString *token in
+             [body componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceCharacterSet]) {
+            if (token.length) {
+                [tokens addObject:token];
+            }
+        }
+        if (!tokens.count) {
+            continue;
+        }
+        if (tokens.count != 2) {
+            return NO;
+        }
+        NSUInteger bit = 0;
+        if ([tokens[0] isEqual:@"127.0.0.1"] && [tokens[1] isEqual:@"localhost"]) {
+            bit = 1u;
+        } else if ([tokens[0] isEqual:@"255.255.255.255"] && [tokens[1] isEqual:@"broadcasthost"]) {
+            bit = 2u;
+        } else if ([tokens[0] isEqual:@"::1"] && [tokens[1] isEqual:@"localhost"]) {
+            bit = 4u;
+        } else {
+            return NO;
+        }
+        if (seen & bit) {
+            return NO;
+        }
+        seen |= bit;
+    }
+    return seen == 7u;
+}
+static BOOL EligibleDefaultFingerprint(NSDictionary *fingerprint, NSData *data, uid_t owner) {
+    return [fingerprint[@"kind"] isEqual:@"regular"] &&
+           [fingerprint[@"uid"] unsignedLongLongValue] == (uint64_t)owner &&
+           [fingerprint[@"nlink"] unsignedLongLongValue] == 1 &&
+           [fingerprint[@"size"] unsignedLongLongValue] == data.length &&
+           ((mode_t)[fingerprint[@"mode"] unsignedLongLongValue] & 07777) == 0644 &&
+           EligibleDefaultHosts(data);
 }
 static BOOL String(id x, NSUInteger max) {
     return [x isKindOfClass:NSString.class] && [x length] <= max;
@@ -94,12 +156,36 @@ static BOOL SameStat(struct stat a, struct stat b) {
            a.st_mtimespec.tv_nsec == b.st_mtimespec.tv_nsec &&
            a.st_ctimespec.tv_sec == b.st_ctimespec.tv_sec && a.st_ctimespec.tv_nsec == b.st_ctimespec.tv_nsec;
 }
-static void CheckDir(int fd, uid_t owner, BOOL privateDir) {
-    struct stat s;
-    if (fd < 0 || fstat(fd, &s) || !S_ISDIR(s.st_mode) || s.st_uid != owner || (s.st_mode & 0022) ||
-        (privateDir && (s.st_mode & 0777) != 0700)) {
+static struct stat CheckDir(int fd, uid_t owner, BOOL privateDir) {
+    struct stat s = {0};
+    if (fd < 0 || fstat(fd, &s) || !QHProtectedDirectoryAllowed(&s, owner, privateDir)) {
         Fail(@"unsafe-directory");
     }
+    return s;
+}
+static struct stat CheckRoot(int fd, uid_t owner) {
+    struct stat s = {0};
+    if (fd < 0 || fstat(fd, &s) || !QHContainerRootAllowed(&s, owner)) {
+        Fail(@"unsafe-directory");
+    }
+    return s;
+}
+static struct stat CheckPairedVar(int fd, uid_t owner) {
+    struct stat s = {0};
+    if (fd < 0 || fstat(fd, &s) || !QHPairedVarAllowed(&s, owner)) {
+        Fail(@"unsafe-directory");
+    }
+    return s;
+}
+/* Only directories whose immediate entries this helper NEVER changes. Pin
+ * ctime too, so rename-away/rename-back cannot hide behind the same inode.
+ * This detects changes; it is not an atomic namespace lock. */
+static BOOL RoutingAnchorMatches(const struct stat *a, const struct stat *b) {
+    return QHDirectoryAnchorMatches(a, b) && a->st_nlink == b->st_nlink && a->st_size == b->st_size &&
+           a->st_mtimespec.tv_sec == b->st_mtimespec.tv_sec &&
+           a->st_mtimespec.tv_nsec == b->st_mtimespec.tv_nsec &&
+           a->st_ctimespec.tv_sec == b->st_ctimespec.tv_sec &&
+           a->st_ctimespec.tv_nsec == b->st_ctimespec.tv_nsec;
 }
 static void CheckFile(struct stat s, uid_t owner, NSUInteger cap, mode_t exactMode) {
     if (!S_ISREG(s.st_mode) || s.st_uid != owner || s.st_nlink != 1 || s.st_size < 0 ||
@@ -173,8 +259,11 @@ static BOOL TempName(id name) {
     }
     return [[NSUUID alloc] initWithUUIDString:[name substringFromIndex:4]] != nil;
 }
-static NSString *WriteTemp(int dir, NSData *data, mode_t mode, uid_t owner) {
+typedef void (^QHWriteGuard)(void);
+static NSString *WriteTempWithGroup(int dir, NSData *data, mode_t mode, uid_t owner, gid_t group,
+                                    BOOL setGroup, QHWriteGuard guard) {
     NSString *name = NewTemp();
+    guard();
     int fd = openat(dir, name.fileSystemRepresentation, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
                     0600);
     if (fd < 0) {
@@ -184,6 +273,7 @@ static NSString *WriteTemp(int dir, NSData *data, mode_t mode, uid_t owner) {
         const unsigned char *p = data.bytes;
         NSUInteger left = data.length;
         while (left) {
+            guard();
             ssize_t n = write(fd, p, left > 65536 ? 65536 : left);
             if (n < 0 && errno == EINTR) {
                 continue;
@@ -196,11 +286,16 @@ static NSString *WriteTemp(int dir, NSData *data, mode_t mode, uid_t owner) {
             Fault(@"partial-write");
         }
         struct stat s;
-        if (fstat(fd, &s) || s.st_uid != owner || s.st_nlink != 1 || fchmod(fd, mode)) {
+        guard();
+        if (fstat(fd, &s) || s.st_uid != owner || s.st_nlink != 1 || (setGroup && fchown(fd, owner, group)) ||
+            fchmod(fd, mode)) {
             Fail(@"write-failed");
         }
+        guard();
         SyncFile(fd);
     } @catch (NSException *e) {
+        /* A replaced ancestor must not trigger cleanup in a detached tree. */
+        guard();
         unlinkat(dir, name.fileSystemRepresentation, 0);
         @throw e;
     } @finally {
@@ -208,13 +303,18 @@ static NSString *WriteTemp(int dir, NSData *data, mode_t mode, uid_t owner) {
     }
     return name;
 }
-static void AtomicData(int dir, NSString *name, NSData *data, uid_t owner, mode_t mode) {
+static NSString *WriteTemp(int dir, NSData *data, mode_t mode, uid_t owner, QHWriteGuard guard) {
+    return WriteTempWithGroup(dir, data, mode, owner, 0, NO, guard);
+}
+static void AtomicData(int dir, NSString *name, NSData *data, uid_t owner, mode_t mode, QHWriteGuard guard) {
     /* Validate any old entry before replacing it. Caller holds our flock. */
     ReadFile(dir, name, owner, MaxHosts, mode, YES);
-    NSString *tmp = WriteTemp(dir, data, mode, owner);
+    NSString *tmp = WriteTemp(dir, data, mode, owner, guard);
+    guard();
     if (renameat(dir, tmp.fileSystemRepresentation, dir, name.fileSystemRepresentation)) {
         Fail(@"rename-failed");
     }
+    guard();
     SyncDir(dir);
 }
 static NSDictionary *Fingerprint(int dir, NSString *name, uid_t owner, NSUInteger cap) {
@@ -298,7 +398,7 @@ static void ValidateState(id s) {
                   @"version", @"revision", @"active", @"domainCount", @"slot", @"snapshotHash",
                   @"baselineHash", @"original", @"system", @"target"
               ]) ||
-        ![s[@"version"] isEqual:@1] || !String(s[@"revision"], 64) ||
+        !([s[@"version"] isEqual:@1] || [s[@"version"] isEqual:@2]) || !String(s[@"revision"], 64) ||
         ![[NSUUID alloc] initWithUUIDString:s[@"revision"]] || !Integer(s[@"domainCount"], 300000) ||
         !Integer(s[@"slot"], 1) || ![s[@"active"] isKindOfClass:NSNumber.class] ||
         CFGetTypeID((__bridge CFTypeRef)s[@"active"]) != CFBooleanGetTypeID() ||
@@ -309,10 +409,17 @@ static void ValidateState(id s) {
     ValidateFP(s[@"original"]);
     ValidateFP(s[@"system"]);
     ValidateFP(s[@"target"]);
-    if (![@[ @"missing", @"symlink" ] containsObject:s[@"original"][@"kind"]] ||
+    NSString *originalKind = s[@"original"][@"kind"];
+    mode_t originalMode = (mode_t)[s[@"original"][@"mode"] unsignedLongLongValue];
+    BOOL regularOriginal = [originalKind isEqual:@"regular"];
+    if ((![@[ @"missing", @"symlink", @"regular" ] containsObject:originalKind]) ||
+        (regularOriginal &&
+         (![s[@"version"] isEqual:@2] || (originalMode & S_IFMT) != S_IFREG ||
+          (originalMode & 07777) != 0644 || [s[@"original"][@"nlink"] unsignedLongLongValue] != 1 ||
+          [s[@"original"][@"size"] unsignedLongLongValue] > MaxBaseline)) ||
         ![s[@"system"][@"kind"] isEqual:@"regular"] ||
         ([s[@"active"] boolValue] && ![s[@"target"][@"kind"] isEqual:@"regular"]) ||
-        (![s[@"active"] boolValue] && ![s[@"target"][@"kind"] isEqual:s[@"original"][@"kind"]])) {
+        (![s[@"active"] boolValue] && ![s[@"target"][@"kind"] isEqual:originalKind])) {
         Fail(@"metadata-invalid");
     }
 }
@@ -385,16 +492,65 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
     return out;
 }
 
-@interface QHTransaction : NSObject
-@property(nonatomic) int rootFD, etcFD, rawFD, varFD, libFD, stateFD, lockFD;
+static BOOL NamespaceDirectoryAllowed(const struct stat *s, uid_t expectedOwner) {
+    return S_ISDIR(s->st_mode) && !(s->st_mode & 07022) &&
+           (s->st_uid == expectedOwner || s->st_uid == 0 || s->st_uid == 501);
+}
+static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
+    if (!path.isAbsolutePath) {
+        Fail(@"paired-root-conflict");
+    }
+    int fd = open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0) {
+        Fail(@"paired-root-conflict");
+    }
+    NSArray<NSString *> *parts = [path componentsSeparatedByString:@"/"];
+    for (NSString *part in parts) {
+        if (!part.length) {
+            continue;
+        }
+        if ([part isEqual:@"."] || [part isEqual:@".."] || [part rangeOfString:@"/"].location != NSNotFound) {
+            close(fd);
+            Fail(@"paired-root-conflict");
+        }
+        int next = openat(fd, part.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        struct stat st;
+        if (next < 0 || fstat(next, &st) || !NamespaceDirectoryAllowed(&st, expectedOwner)) {
+            if (next >= 0) {
+                close(next);
+            }
+            close(fd);
+            Fail(@"paired-root-conflict");
+        }
+        close(fd);
+        fd = next;
+    }
+    return fd;
+}
+@interface QHTransaction : NSObject {
+    struct stat _rootAnchor, _etcAnchor, _rawAnchor, _privateAnchor, _varAnchor, _libAnchor, _stateAnchor;
+    struct stat _varLinkAnchor, _pairParentAnchor, _pairRootAnchor, _pairLinkAnchor, _backlinkAnchor;
+}
+@property(nonatomic) int rootFD, etcFD, rawFD, privateFD, varFD, libFD, stateFD, lockFD;
+@property(nonatomic) int pairParentFD, pairRootFD;
+@property(nonatomic, copy) NSData *varLinkText, *pairLinkText, *backlinkText;
 @property(nonatomic) uid_t owner;
 @property(nonatomic, copy) NSString *rootPath, *systemPath, *rawName, *canonicalSystem;
-@property(nonatomic) BOOL recovered, actualChanged;
-@property(nonatomic, strong) NSDictionary *state, *target, *system;
-@property(nonatomic, strong) NSData *baseline, *snapshot;
-- (instancetype)initWithRoot:(NSString *)root system:(NSString *)system owner:(uid_t)owner;
+@property(nonatomic, copy) NSString *pairedNativeDataRoot, *pairedCanonicalDataRoot, *pairParentPath;
+@property(nonatomic, copy) NSString *pairRootName, *canonicalRootPath;
+@property(nonatomic) BOOL pairedConfigured, pairedLayout, adoptionRequired, recovered, actualChanged;
+@property(nonatomic, strong) NSDictionary *state, *target, *system, *original;
+@property(nonatomic, strong) NSData *baseline, *snapshot, *existingHosts;
+- (instancetype)initWithRoot:(NSString *)root
+                      system:(NSString *)system
+                       owner:(uid_t)owner
+              pairedDataRoot:(NSString *_Nullable)pairedDataRoot;
 - (void)openState:(BOOL)create;
 - (void)anchors;
+- (void)beforeWrite:(NSString *)point;
+- (void)checkVarLink;
+- (void)capturePairedLinks;
+- (void)checkPairedLinks;
 - (void)load;
 - (void)recover;
 - (NSDictionary *)response;
@@ -402,41 +558,94 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
 @end
 @implementation QHTransaction
 - (instancetype)initWithRoot:(NSString *)root system:(NSString *)system owner:(uid_t)owner {
+    return [self initWithRoot:root system:system owner:owner pairedDataRoot:nil];
+}
+- (instancetype)initWithRoot:(NSString *)root
+                      system:(NSString *)system
+                       owner:(uid_t)owner
+              pairedDataRoot:(NSString *)pairedDataRoot {
     if ((self = [super init])) {
-        _rootFD = _etcFD = _rawFD = _varFD = _libFD = _stateFD = _lockFD = -1;
+        _rootFD = _etcFD = _rawFD = _privateFD = _varFD = _libFD = _stateFD = _lockFD = -1;
+        _pairParentFD = _pairRootFD = -1;
         _owner = owner;
         _rootPath = [root copy];
+        while (_rootPath.length > 1 && [_rootPath hasSuffix:@"/"]) {
+            _rootPath = [_rootPath substringToIndex:_rootPath.length - 1];
+        }
         _systemPath = [system copy];
         _rawName = system.lastPathComponent;
-        _rootFD = open(root.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-        CheckDir(_rootFD, owner, NO);
+        if (!_rootPath.isAbsolutePath || !_systemPath.isAbsolutePath) {
+            Fail(@"unsafe-directory");
+        }
+        _rootFD = open(_rootPath.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        _rootAnchor = CheckRoot(_rootFD, owner);
         _etcFD = openat(_rootFD, "etc", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-        CheckDir(_etcFD, owner, NO);
+        _etcAnchor = CheckDir(_etcFD, owner, NO);
         char resolved[PATH_MAX];
-        if (!root.isAbsolutePath || !system.isAbsolutePath ||
-            !realpath(system.stringByDeletingLastPathComponent.fileSystemRepresentation, resolved)) {
+        if (!realpath(system.stringByDeletingLastPathComponent.fileSystemRepresentation, resolved)) {
             Fail(@"unsafe-system-directory");
         }
         NSString *rawParent = [NSString stringWithUTF8String:resolved];
         _canonicalSystem = [rawParent stringByAppendingPathComponent:_rawName];
         _rawFD = open(rawParent.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-        CheckDir(_rawFD, owner, NO);
+        _rawAnchor = CheckDir(_rawFD, owner, NO);
         struct stat a, b;
-        fstat(_etcFD, &a);
-        fstat(_rawFD, &b);
-        if (a.st_dev == b.st_dev && a.st_ino == b.st_ino) {
+        if (fstat(_etcFD, &a) || fstat(_rawFD, &b) || (a.st_dev == b.st_dev && a.st_ino == b.st_ino) ||
+            fstat(_rootFD, &a) || (a.st_dev == b.st_dev && a.st_ino == b.st_ino)) {
             Fail(@"root-alias");
         }
-        fstat(_rootFD, &a);
-        fstat(_rawFD, &b);
-        if (a.st_dev == b.st_dev && a.st_ino == b.st_ino) {
-            Fail(@"root-alias");
+        if (pairedDataRoot) {
+            NSString *native = [pairedDataRoot copy];
+            while (native.length > 1 && [native hasSuffix:@"/"]) {
+                native = [native substringToIndex:native.length - 1];
+            }
+            NSString *rootDir = native.stringByDeletingLastPathComponent;
+            NSString *name = rootDir.lastPathComponent;
+            NSString *brandText = [name hasPrefix:@".jbroot-"] ? [name substringFromIndex:8] : @"";
+            NSCharacterSet *nonHex =
+                [[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdefABCDEF"] invertedSet];
+            if (!native.isAbsolutePath || ![native.lastPathComponent isEqual:@"var"] ||
+                ![name isEqual:_rootPath.lastPathComponent] || brandText.length != 16 ||
+                [brandText rangeOfCharacterFromSet:nonHex].location != NSNotFound) {
+                Fail(@"paired-root-conflict");
+            }
+            NSString *parent = rootDir.stringByDeletingLastPathComponent;
+#ifndef QH_TESTING
+            if (![parent isEqual:@"/var/mobile/Containers/Shared/AppGroup"]) {
+                Fail(@"paired-root-conflict");
+            }
+#endif
+            if (!realpath(parent.fileSystemRepresentation, resolved)) {
+                Fail(@"paired-root-conflict");
+            }
+            _pairParentPath = [NSString stringWithUTF8String:resolved];
+#ifndef QH_TESTING
+            NSString *canonicalAlias = [@"/private" stringByAppendingString:parent];
+            if (![_pairParentPath isEqual:parent] && ![_pairParentPath isEqual:canonicalAlias]) {
+                Fail(@"paired-root-conflict");
+            }
+#endif
+            _pairedNativeDataRoot = native;
+            _pairedCanonicalDataRoot =
+                [[_pairParentPath stringByAppendingPathComponent:name] stringByAppendingPathComponent:@"var"];
+            _pairRootName = name;
+            _pairParentFD = OpenNamespaceDirectory(_pairParentPath, owner);
+            if (fstat(_pairParentFD, &_pairParentAnchor)) {
+                Fail(@"paired-root-conflict");
+            }
+            if (!realpath(_rootPath.stringByDeletingLastPathComponent.fileSystemRepresentation, resolved)) {
+                Fail(@"paired-root-conflict");
+            }
+            _canonicalRootPath = [[NSString stringWithUTF8String:resolved]
+                stringByAppendingPathComponent:_rootPath.lastPathComponent];
+            _pairedConfigured = YES;
         }
     }
     return self;
 }
 - (void)dealloc {
-    int fds[] = {_lockFD, _stateFD, _libFD, _varFD, _rawFD, _etcFD, _rootFD};
+    int fds[] = {_lockFD, _stateFD, _libFD,      _varFD,        _privateFD,
+                 _rawFD,  _etcFD,   _pairRootFD, _pairParentFD, _rootFD};
     for (NSUInteger i = 0; i < sizeof(fds) / sizeof(fds[0]); i++) {
         if (fds[i] >= 0) {
             close(fds[i]);
@@ -445,29 +654,85 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
 }
 - (void)openState:(BOOL)create {
     if (_varFD < 0) {
-        _varFD = openat(_rootFD, "var", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        struct stat entry;
+        if (fstatat(_rootFD, "var", &entry, AT_SYMLINK_NOFOLLOW)) {
+            Fail(_pairedConfigured ? @"paired-root-conflict" : @"unsafe-directory");
+        }
+        if (S_ISLNK(entry.st_mode)) {
+            char text[PATH_MAX];
+            ssize_t n = readlinkat(_rootFD, "var", text, sizeof(text));
+            if (n < 0 || !QHVarLinkAllowed(&entry, _owner, text, (size_t)n)) {
+                Fail(_pairedConfigured ? @"paired-root-conflict" : @"unsafe-directory");
+            }
+            _varLinkAnchor = entry;
+            _varLinkText = [NSData dataWithBytes:text length:(NSUInteger)n];
+            [self checkVarLink];
+            _privateFD = openat(_rootFD, "private", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+            _privateAnchor = CheckDir(_privateFD, _owner, NO);
+            if (_pairedConfigured) {
+                struct stat rootEntry;
+                if (fstatat(_pairParentFD, _pairRootName.fileSystemRepresentation, &rootEntry,
+                            AT_SYMLINK_NOFOLLOW) ||
+                    !S_ISDIR(rootEntry.st_mode)) {
+                    Fail(@"paired-root-conflict");
+                }
+                _pairRootFD = openat(_pairParentFD, _pairRootName.fileSystemRepresentation,
+                                     O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+                _pairRootAnchor = CheckDir(_pairRootFD, _owner, NO);
+                if (!QHDirectoryAnchorMatches(&rootEntry, &_pairRootAnchor)) {
+                    Fail(@"paired-root-conflict");
+                }
+                _varFD = openat(_pairRootFD, "var", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+                _varAnchor = CheckPairedVar(_varFD, _owner);
+                _pairedLayout = YES;
+                [self capturePairedLinks];
+                [self checkPairedLinks];
+            } else {
+                /* Legacy flat fixtures may have a real private/var directory;
+                 * never follow an intermediate link in this branch. */
+                _varFD = openat(_privateFD, "var", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+                _varAnchor = CheckDir(_varFD, _owner, NO);
+            }
+        } else {
+            if (_pairedConfigured || !S_ISDIR(entry.st_mode)) {
+                Fail(_pairedConfigured ? @"paired-root-conflict" : @"unsafe-directory");
+            }
+            _varFD = openat(_rootFD, "var", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+            _varAnchor = CheckDir(_varFD, _owner, NO);
+            if (!QHDirectoryAnchorMatches(&entry, &_varAnchor)) {
+                Fail(@"directory-raced");
+            }
+        }
     }
-    CheckDir(_varFD, _owner, NO);
     if (_libFD < 0) {
         _libFD = openat(_varFD, "lib", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        _libAnchor = CheckDir(_libFD, _owner, NO);
     }
-    CheckDir(_libFD, _owner, NO);
+    [self anchors];
     if (create) {
+        [self beforeWrite:@"create-state"];
         if (mkdirat(_libFD, "quiethosts", 0700) && errno != EEXIST) {
             Fail(@"state-create-failed");
         }
+        [self beforeWrite:@"sync-state-parent"];
         SyncDir(_libFD);
     }
     if (_stateFD < 0) {
         _stateFD = openat(_libFD, "quiethosts", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        if (_stateFD >= 0) {
+            _stateAnchor = CheckDir(_stateFD, _owner, YES);
+        }
     }
     if (_stateFD < 0 && errno == ENOENT && !create) {
         return;
     }
     CheckDir(_stateFD, _owner, YES);
+    [self anchors];
     if (_lockFD >= 0) {
-        [self anchors];
         return;
+    }
+    if (create) {
+        [self beforeWrite:@"create-lock"];
     }
     _lockFD =
         openat(_stateFD, "lock", O_RDWR | (create ? O_CREAT : 0) | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK, 0600);
@@ -487,37 +752,161 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
     }
     [self anchors];
 }
+- (void)beforeWrite:(NSString *)point {
+#ifdef QH_TESTING
+    if ([DirectoryMutationPoint isEqual:point] && DirectoryMutation) {
+        void (^mutation)(void) = DirectoryMutation;
+        DirectoryMutationPoint = nil;
+        DirectoryMutation = nil;
+        mutation();
+    }
+#else
+    (void)point;
+#endif
+    [self anchors];
+#ifdef QH_TESTING
+    // Deliberately after the last guard: tests expose (not hide) the syscall gap.
+    NSString *after = [@"after-check:" stringByAppendingString:point];
+    if ([DirectoryMutationPoint isEqual:after] && DirectoryMutation) {
+        void (^mutation)(void) = DirectoryMutation;
+        DirectoryMutationPoint = nil;
+        DirectoryMutation = nil;
+        mutation();
+    }
+#endif
+}
+- (void)checkVarLink {
+    if (!_varLinkText) {
+        return;
+    }
+    struct stat before, after;
+    char text[PATH_MAX];
+    if (fstatat(_rootFD, "var", &before, AT_SYMLINK_NOFOLLOW) || !SameStat(before, _varLinkAnchor)) {
+        Fail(@"directory-raced");
+    }
+    ssize_t n = readlinkat(_rootFD, "var", text, sizeof(text));
+    if (n < 0 || !QHVarLinkAllowed(&before, _owner, text, (size_t)n) ||
+        (NSUInteger)n != _varLinkText.length || memcmp(text, _varLinkText.bytes, (size_t)n) ||
+        fstatat(_rootFD, "var", &after, AT_SYMLINK_NOFOLLOW) || !SameStat(before, after)) {
+        Fail(@"directory-raced");
+    }
+}
+- (void)capturePairedLinks {
+    struct stat linkStat;
+    char text[PATH_MAX];
+    if (fstatat(_privateFD, "var", &linkStat, AT_SYMLINK_NOFOLLOW)) {
+        Fail(@"paired-root-conflict");
+    }
+    ssize_t n = readlinkat(_privateFD, "var", text, sizeof(text));
+    if (n <= 0 || n >= PATH_MAX ||
+        !QHPairedRootLinkAllowed(&linkStat, _owner, text, (size_t)n,
+                                 _pairedNativeDataRoot.fileSystemRepresentation,
+                                 strlen(_pairedNativeDataRoot.fileSystemRepresentation),
+                                 _pairedCanonicalDataRoot.fileSystemRepresentation,
+                                 strlen(_pairedCanonicalDataRoot.fileSystemRepresentation))) {
+        Fail(@"paired-root-conflict");
+    }
+    _pairLinkAnchor = linkStat;
+    _pairLinkText = [NSData dataWithBytes:text length:(NSUInteger)n];
+    if (fstatat(_pairRootFD, ".jbroot", &linkStat, AT_SYMLINK_NOFOLLOW)) {
+        Fail(@"paired-root-conflict");
+    }
+    n = readlinkat(_pairRootFD, ".jbroot", text, sizeof(text));
+    if (n <= 0 || n >= PATH_MAX ||
+        !QHPairedRootLinkAllowed(&linkStat, _owner, text, (size_t)n, _rootPath.fileSystemRepresentation,
+                                 strlen(_rootPath.fileSystemRepresentation),
+                                 _canonicalRootPath.fileSystemRepresentation,
+                                 strlen(_canonicalRootPath.fileSystemRepresentation))) {
+        Fail(@"paired-root-conflict");
+    }
+    _backlinkAnchor = linkStat;
+    _backlinkText = [NSData dataWithBytes:text length:(NSUInteger)n];
+}
+- (void)checkPairedLinks {
+    if (!_pairedLayout) {
+        return;
+    }
+    int parent = OpenNamespaceDirectory(_pairParentPath, _owner);
+    struct stat a, b;
+    BOOL parentOK = fstat(parent, &a) == 0 && fstat(_pairParentFD, &b) == 0 &&
+                    RoutingAnchorMatches(&a, &_pairParentAnchor) &&
+                    RoutingAnchorMatches(&b, &_pairParentAnchor);
+    close(parent);
+    if (!parentOK ||
+        fstatat(_pairParentFD, _pairRootName.fileSystemRepresentation, &a, AT_SYMLINK_NOFOLLOW) ||
+        !RoutingAnchorMatches(&a, &_pairRootAnchor) || fstat(_pairRootFD, &b) ||
+        !RoutingAnchorMatches(&b, &_pairRootAnchor) || fstatat(_pairRootFD, "var", &a, AT_SYMLINK_NOFOLLOW) ||
+        !QHPairedVarAllowed(&a, _owner) || !RoutingAnchorMatches(&a, &_varAnchor) || fstat(_varFD, &b) ||
+        !QHPairedVarAllowed(&b, _owner) || !RoutingAnchorMatches(&b, &_varAnchor)) {
+        Fail(@"directory-raced");
+    }
+    struct stat before, after;
+    char text[PATH_MAX];
+    ssize_t n;
+    if (fstatat(_privateFD, "var", &before, AT_SYMLINK_NOFOLLOW) || !SameStat(before, _pairLinkAnchor)) {
+        Fail(@"directory-raced");
+    }
+    n = readlinkat(_privateFD, "var", text, sizeof(text));
+    if (n <= 0 || n >= PATH_MAX ||
+        !QHPairedRootLinkAllowed(&before, _owner, text, (size_t)n,
+                                 _pairedNativeDataRoot.fileSystemRepresentation,
+                                 strlen(_pairedNativeDataRoot.fileSystemRepresentation),
+                                 _pairedCanonicalDataRoot.fileSystemRepresentation,
+                                 strlen(_pairedCanonicalDataRoot.fileSystemRepresentation)) ||
+        (NSUInteger)n != _pairLinkText.length || memcmp(text, _pairLinkText.bytes, (size_t)n) ||
+        fstatat(_privateFD, "var", &after, AT_SYMLINK_NOFOLLOW) || !SameStat(before, after)) {
+        Fail(@"directory-raced");
+    }
+    if (fstatat(_pairRootFD, ".jbroot", &before, AT_SYMLINK_NOFOLLOW) || !SameStat(before, _backlinkAnchor)) {
+        Fail(@"directory-raced");
+    }
+    n = readlinkat(_pairRootFD, ".jbroot", text, sizeof(text));
+    if (n <= 0 || n >= PATH_MAX ||
+        !QHPairedRootLinkAllowed(&before, _owner, text, (size_t)n, _rootPath.fileSystemRepresentation,
+                                 strlen(_rootPath.fileSystemRepresentation),
+                                 _canonicalRootPath.fileSystemRepresentation,
+                                 strlen(_canonicalRootPath.fileSystemRepresentation)) ||
+        (NSUInteger)n != _backlinkText.length || memcmp(text, _backlinkText.bytes, (size_t)n) ||
+        fstatat(_pairRootFD, ".jbroot", &after, AT_SYMLINK_NOFOLLOW) || !SameStat(before, after)) {
+        Fail(@"directory-raced");
+    }
+}
 - (void)anchors {
     int f = open(_rootPath.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     @try {
-        CheckDir(f, _owner, NO);
-        struct stat a, b;
+        struct stat a = CheckRoot(f, _owner), b = CheckRoot(_rootFD, _owner);
+        if (!RoutingAnchorMatches(&a, &_rootAnchor) || !RoutingAnchorMatches(&b, &_rootAnchor)) {
+            Fail(@"directory-raced");
+        }
+        [self checkVarLink];
+        [self checkPairedLinks];
         char resolved[PATH_MAX];
         if (!realpath(_systemPath.stringByDeletingLastPathComponent.fileSystemRepresentation, resolved) ||
             ![[_canonicalSystem stringByDeletingLastPathComponent]
                 isEqual:[NSString stringWithUTF8String:resolved]]) {
             Fail(@"system-directory-changed");
         }
-        if (stat(resolved, &a) || fstat(_rawFD, &b) || !S_ISDIR(a.st_mode) || a.st_uid != _owner ||
-            (a.st_mode & 0022) || a.st_dev != b.st_dev || a.st_ino != b.st_ino) {
+        if (stat(resolved, &a) || fstat(_rawFD, &b) || !QHProtectedDirectoryAllowed(&a, _owner, NO) ||
+            !QHDirectoryAnchorMatches(&a, &_rawAnchor) || !QHDirectoryAnchorMatches(&b, &_rawAnchor)) {
             Fail(@"system-directory-changed");
         }
-        if (fstat(f, &a) || fstat(_rootFD, &b) || a.st_dev != b.st_dev || a.st_ino != b.st_ino) {
-            Fail(@"directory-raced");
-        }
-        const char *names[] = {"etc", "var", "lib", "quiethosts"};
-        int parents[] = {_rootFD, _rootFD, _varFD, _libFD};
-        int children[] = {_etcFD, _varFD, _libFD, _stateFD};
-        for (NSUInteger i = 0; i < 4; i++) {
-            if (children[i] < 0) {
+        const char *names[] = {"etc", "private", "var", "lib", "quiethosts"};
+        int parents[] = {_rootFD, _rootFD, _varLinkText ? _privateFD : _rootFD, _varFD, _libFD};
+        int children[] = {_etcFD, _privateFD, _varFD, _libFD, _stateFD};
+        const struct stat *snapshots[] = {&_etcAnchor, &_privateAnchor, &_varAnchor, &_libAnchor,
+                                          &_stateAnchor};
+        for (NSUInteger i = 0; i < 5; i++) {
+            if (children[i] < 0 || (i == 2 && _pairedLayout)) {
                 continue;
             }
-            CheckDir(children[i], _owner, i == 3);
-            if (fstatat(parents[i], names[i], &a, AT_SYMLINK_NOFOLLOW) || fstat(children[i], &b) ||
-                !S_ISDIR(a.st_mode) || a.st_dev != b.st_dev || a.st_ino != b.st_ino) {
+            b = CheckDir(children[i], _owner, i == 4);
+            if (fstatat(parents[i], names[i], &a, AT_SYMLINK_NOFOLLOW) ||
+                !QHDirectoryAnchorMatches(&a, snapshots[i]) || !QHDirectoryAnchorMatches(&b, snapshots[i])) {
                 Fail(@"directory-raced");
             }
         }
+        [self checkVarLink];
+        [self checkPairedLinks];
         if (_lockFD >= 0 &&
             (fstat(_lockFD, &b) || fstatat(_stateFD, "lock", &a, AT_SYMLINK_NOFOLLOW) || !SameStat(a, b))) {
             Fail(@"lock-raced");
@@ -607,19 +996,40 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
     return d;
 }
 - (void)validateContents:(NSDictionary *)state baseline:(NSData *)baseline snapshot:(NSData *)snapshot {
-    if (![state[@"system"] isEqual:_system] || ![Digest(baseline) isEqual:_system[@"hash"]]) {
+    if (![state[@"system"] isEqual:_system]) {
         Fail(@"system-changed");
     }
-    if ([state[@"original"][@"kind"] isEqual:@"symlink"]) {
-        [self verifyLinkText:state[@"original"][@"text"]];
+    NSDictionary *original = state[@"original"];
+    NSString *kind = original[@"kind"];
+    if ([kind isEqual:@"regular"]) {
+        if (![Digest(baseline) isEqual:original[@"hash"]] ||
+            [original[@"size"] unsignedLongLongValue] != baseline.length ||
+            [original[@"uid"] unsignedLongLongValue] != (uint64_t)_owner ||
+            !EligibleDefaultFingerprint(original, baseline, _owner)) {
+            Fail(@"backup-corrupt");
+        }
+        if (![state[@"active"] boolValue]) {
+            NSDictionary *target = state[@"target"];
+            if (![target[@"hash"] isEqual:original[@"hash"]] ||
+                ![target[@"size"] isEqual:original[@"size"]] || ![target[@"uid"] isEqual:original[@"uid"]] ||
+                ![target[@"gid"] isEqual:original[@"gid"]] || ![target[@"mode"] isEqual:original[@"mode"]]) {
+                Fail(@"metadata-invalid");
+            }
+        }
+    } else if (![Digest(baseline) isEqual:_system[@"hash"]]) {
+        Fail(@"system-changed");
+    }
+    if ([kind isEqual:@"symlink"]) {
+        [self verifyLinkText:original[@"text"]];
     }
     if ([state[@"active"] boolValue]) {
         NSData *combined = Overlay(baseline, snapshot);
         if (![Digest(combined) isEqual:state[@"target"][@"hash"]]) {
             Fail(@"metadata-invalid");
         }
-    } else if ([state[@"original"][@"kind"] isEqual:@"symlink"] &&
-               ![state[@"original"][@"text"] isEqual:state[@"target"][@"text"]]) {
+    } else if ([kind isEqual:@"symlink"] && ![original[@"text"] isEqual:state[@"target"][@"text"]]) {
+        Fail(@"metadata-invalid");
+    } else if ([kind isEqual:@"missing"] && ![state[@"target"][@"kind"] isEqual:@"missing"]) {
         Fail(@"metadata-invalid");
     }
 }
@@ -645,12 +1055,29 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
                 Fail(@"orphan-preparation");
             }
         }
-        [self verifyMirror:_target];
-        _baseline = ReadFile(_rawFD, _rawName, _owner, MaxBaseline, 0, NO);
-        if (![Digest(_baseline) isEqual:_system[@"hash"]]) {
-            Fail(@"file-raced");
+        if ([_target[@"kind"] isEqual:@"regular"]) {
+            if ([_target[@"size"] unsignedLongLongValue] > MaxBaseline) {
+                Fail(@"unmanaged-target");
+            }
+            NSData *existing = ReadFile(_etcFD, @"hosts", _owner, MaxBaseline, 0, NO);
+            if (![Digest(existing) isEqual:_target[@"hash"]]) {
+                Fail(@"file-raced");
+            }
+            if (!EligibleDefaultFingerprint(_target, existing, _owner)) {
+                Fail(@"unmanaged-target");
+            }
+            _adoptionRequired = YES;
+            _existingHosts = existing;
+            _baseline = existing;
+            Overlay(_baseline, NSData.data); // preserve the exact original bytes as a valid baseline
+        } else {
+            [self verifyMirror:_target];
+            _baseline = ReadFile(_rawFD, _rawName, _owner, MaxBaseline, 0, NO);
+            if (![Digest(_baseline) isEqual:_system[@"hash"]]) {
+                Fail(@"file-raced");
+            }
+            Overlay(_baseline, NSData.data); // reject malformed originals before takeover
         }
-        Overlay(_baseline, NSData.data); // reject malformed originals before takeover
         return;
     }
     if (_lockFD < 0) {
@@ -663,7 +1090,7 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
     if (![_target isEqual:_state[@"target"]]) {
         Fail(@"target-conflict");
     }
-    if (![_state[@"active"] boolValue]) {
+    if (![_state[@"active"] boolValue] && ![_state[@"original"][@"kind"] isEqual:@"regular"]) {
         [self verifyMirror:_target];
     }
 }
@@ -730,9 +1157,11 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
      * Replaying an already-renamed target still leaves DNS reload unconfirmed. */
     _recovered = ![j[@"beforeTarget"] isEqual:j[@"afterTarget"]] || _recovered;
     if (!ReadFile(_stateFD, @"original.bin", _owner, MaxBaseline, 0400, YES)) {
+        [self beforeWrite:@"commit-backup"];
         if (renameat(_stateFD, "original.pending", _stateFD, "original.bin")) {
             Fail(@"backup-commit-failed");
         }
+        [self beforeWrite:@"sync-backup"];
         SyncDir(_stateFD);
     }
     Fault(@"after-backup");
@@ -742,6 +1171,7 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
             ![Fingerprint(_etcFD, @"hosts", _owner, MaxHosts) isEqual:j[@"beforeTarget"]]) {
             Fail(@"target-conflict");
         }
+        [self beforeWrite:@"commit-target"];
         if (missing) {
             if (unlinkat(_etcFD, "hosts", 0)) {
                 Fail(@"rename-failed");
@@ -751,27 +1181,32 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
         }
         _actualChanged = YES;
         Fault(@"after-rename-before-sync");
+        [self beforeWrite:@"sync-target"];
         SyncDir(_etcFD);
     }
+    [self beforeWrite:@"sync-target"];
     SyncDir(_etcFD); // also sync an already-renamed target during replay
     Fault(@"after-target");
     if (![Fingerprint(_etcFD, @"hosts", _owner, MaxHosts) isEqual:j[@"afterTarget"]]) {
         Fail(@"target-conflict");
     }
     Fault(@"recoverstate");
-    AtomicData(_stateFD, @"state.json", JSON(after), _owner, 0600);
+    AtomicData(_stateFD, @"state.json", JSON(after), _owner, 0600, ^{
+        [self beforeWrite:@"commit-state"];
+    });
     Fault(@"after-state");
+    [self beforeWrite:@"clear-journal"];
     if (unlinkat(_stateFD, "journal.json", 0)) {
         Fail(@"journal-remove-failed");
     }
+    [self beforeWrite:@"sync-journal-clear"];
     SyncDir(_stateFD);
     Fault(@"after-journal-clear");
 }
 - (NSDictionary *)response {
-    /* load has proved metadata against the current entry and raw baseline. */
     NSString *revision =
         _state ? _state[@"revision"] : Digest(JSON(@{@"target" : _target, @"system" : _system}));
-    return @{
+    NSMutableDictionary *result = [@{
         @"ok" : @YES,
         @"state" : _state ? ([_state[@"active"] boolValue] ? @"active" : @"inactive") : @"unmanaged",
         @"revision" : revision,
@@ -780,7 +1215,13 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
         @"reloadRequested" : @NO,
         @"reloadPending" : @(_recovered),
         @"hasBaseline" : @(_state != nil)
-    };
+    } mutableCopy];
+    if (_adoptionRequired && !_state) {
+        result[@"requiresAdoption"] = @YES;
+        result[@"existingHostsBytes"] = @(_existingHosts.length);
+        result[@"existingHostsHash"] = Digest(_existingHosts);
+    }
+    return result;
 }
 - (BOOL)transact:(NSData *)snapshot active:(BOOL)active count:(NSUInteger)count {
     if (!_state && !active) {
@@ -794,7 +1235,7 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
     NSDictionary *original = _state ? _state[@"original"] : _target;
     NSUInteger slot = _state ? 1 - [_state[@"slot"] unsignedIntegerValue] : 0;
     NSMutableDictionary *next = [@{
-        @"version" : @1,
+        @"version" : @2,
         @"revision" : NSUUID.UUID.UUIDString,
         @"active" : @(active),
         @"domainCount" : @(count),
@@ -805,16 +1246,23 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
         @"system" : _system
     } mutableCopy];
     /* Prepare data, never overwrite the slot referenced by the committed state. */
-    AtomicData(_stateFD, Slot(next), snapshot, _owner, 0600);
+    AtomicData(_stateFD, Slot(next), snapshot, _owner, 0600, ^{
+        [self beforeWrite:@"prepare-snapshot"];
+    });
     if (!_state) {
-        AtomicData(_stateFD, @"original.pending", _baseline, _owner, 0400);
+        AtomicData(_stateFD, @"original.pending", _baseline, _owner, 0400, ^{
+            [self beforeWrite:@"prepare-backup"];
+        });
     }
     Fault(@"after-prepared");
     NSString *tmp = @"";
     if (active) {
-        tmp = WriteTemp(_etcFD, combined, 0644, _owner);
+        tmp = WriteTemp(_etcFD, combined, 0644, _owner, ^{
+            [self beforeWrite:@"stage-target"];
+        });
     } else if ([original[@"kind"] isEqual:@"symlink"]) {
         tmp = NewTemp();
+        [self beforeWrite:@"stage-mirror"];
         if (symlinkat([original[@"text"] fileSystemRepresentation], _etcFD, tmp.fileSystemRepresentation)) {
             Fail(@"write-failed");
         }
@@ -830,8 +1278,20 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
         if (!valid) {
             Fail(@"mirror-conflict");
         }
+    } else if ([original[@"kind"] isEqual:@"regular"]) {
+        uid_t originalUID = (uid_t)[original[@"uid"] unsignedLongLongValue];
+        gid_t originalGID = (gid_t)[original[@"gid"] unsignedLongLongValue];
+        mode_t originalMode = (mode_t)[original[@"mode"] unsignedLongLongValue] & 07777;
+        if (originalUID != _owner || originalMode != 0644 ||
+            !EligibleDefaultFingerprint(original, _baseline, _owner)) {
+            Fail(@"backup-corrupt");
+        }
+        tmp = WriteTempWithGroup(_etcFD, _baseline, originalMode, originalUID, originalGID, YES, ^{
+            [self beforeWrite:@"stage-regular-restore"];
+        });
     }
     next[@"target"] = tmp.length ? Fingerprint(_etcFD, tmp, _owner, MaxHosts) : @{@"kind" : @"missing"};
+    [self beforeWrite:@"sync-staged-target"];
     SyncDir(_etcFD);
     Fault(@"before-journal");
     if (![Fingerprint(_etcFD, @"hosts", _owner, MaxHosts) isEqual:_target] ||
@@ -846,7 +1306,9 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
         @"afterTarget" : next[@"target"],
         @"stagedName" : tmp
     };
-    AtomicData(_stateFD, @"journal.json", JSON(journal), _owner, 0600);
+    AtomicData(_stateFD, @"journal.json", JSON(journal), _owner, 0600, ^{
+        [self beforeWrite:@"prepare-journal"];
+    });
     Fault(@"after-journal");
     [self recover];
     [self load];
@@ -857,17 +1319,24 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
 /* Production paths are supplied only by main; never taken from JSON. Holding
  * no descriptor between requests prevents stale observations / stale flocks. */
 @interface QHFileManager ()
-@property(nonatomic, copy) NSString *mappedRoot, *rawSystem;
+@property(nonatomic, copy) NSString *mappedRoot, *rawSystem, *pairedDataRoot;
 @property(nonatomic) uid_t expectedOwner;
 @end
 @implementation QHFileManager
 - (instancetype)initWithRoot:(NSString *)mappedJbroot
                  systemHosts:(NSString *)rawSystemPath
                expectedOwner:(uid_t)uid {
+    return [self initWithRoot:mappedJbroot systemHosts:rawSystemPath expectedOwner:uid pairedDataRoot:nil];
+}
+- (instancetype)initWithRoot:(NSString *)mappedJbroot
+                 systemHosts:(NSString *)rawSystemPath
+               expectedOwner:(uid_t)uid
+              pairedDataRoot:(NSString *)pairedDataRoot {
     if ((self = [super init])) {
         _mappedRoot = [mappedJbroot copy];
         _rawSystem = [rawSystemPath copy];
         _expectedOwner = uid;
+        _pairedDataRoot = [pairedDataRoot copy];
     }
     return self;
 }
@@ -881,12 +1350,24 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
         }
         BOOL status = [command isEqual:@"status"], uninstall = [command isEqual:@"restore-for-uninstall"];
         BOOL apply = [command isEqual:@"apply"];
-        NSArray *keys = (status || uninstall)
-                            ? @[]
-                            : (apply ? @[ @"expectedRevision", @"hostsBase64", @"domainCount" ]
-                                     : @[ @"expectedRevision" ]);
-        if (!Keys(request, keys)) {
+        NSArray *applyKeys = @[ @"expectedRevision", @"hostsBase64", @"domainCount" ];
+        BOOL hasAdoptionFlag = [request isKindOfClass:NSDictionary.class] &&
+                               [request.allKeys containsObject:@"adoptExistingHosts"];
+        NSArray *keys = (status || uninstall) ? @[] : (apply ? applyKeys : @[ @"expectedRevision" ]);
+        BOOL exactKeys =
+            Keys(request, keys) || (apply && hasAdoptionFlag &&
+                                    Keys(request, [applyKeys arrayByAddingObject:@"adoptExistingHosts"]));
+        if (!exactKeys) {
             Fail(@"invalid-request");
+        }
+        BOOL adoptionConsent = NO;
+        if (hasAdoptionFlag) {
+            id value = request[@"adoptExistingHosts"];
+            if (![value isKindOfClass:NSNumber.class] ||
+                CFGetTypeID((__bridge CFTypeRef)value) != CFBooleanGetTypeID()) {
+                Fail(@"invalid-request");
+            }
+            adoptionConsent = [value boolValue];
         }
         if (!status && !uninstall &&
             (!String(request[@"expectedRevision"], 64) || ![request[@"expectedRevision"] length])) {
@@ -917,7 +1398,10 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
                 Fail(@"domain-count-mismatch");
             }
         }
-        t = [[QHTransaction alloc] initWithRoot:_mappedRoot system:_rawSystem owner:_expectedOwner];
+        t = [[QHTransaction alloc] initWithRoot:_mappedRoot
+                                         system:_rawSystem
+                                          owner:_expectedOwner
+                                 pairedDataRoot:_pairedDataRoot];
         [t openState:NO];
         [t load];
         observed = [t response];
@@ -929,6 +1413,15 @@ static NSData *Overlay(NSData *baseline, NSData *compiled) {
         }
         if ([command isEqual:@"reload"]) {
             return observed; // only main can request DNS restart
+        }
+        if (hasAdoptionFlag && (!apply || t.state)) {
+            Fail(@"invalid-request");
+        }
+        if (apply && t.adoptionRequired && !adoptionConsent) {
+            Fail(@"adoption-required");
+        }
+        if (apply && !t.adoptionRequired && adoptionConsent) {
+            Fail(@"adoption-required");
         }
         BOOL active = apply || [command isEqual:@"enable"];
         if (active && !apply && !t.state) {

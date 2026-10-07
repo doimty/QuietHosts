@@ -257,9 +257,23 @@ int main(int argc, char *argv[]) {
             if (!root || root[0] != '/') {
                 return Emit(Failure(@"root-unavailable"));
             }
-            QHFileManager *manager = [[QHFileManager alloc] initWithRoot:[NSString stringWithUTF8String:root]
+            NSString *rootPath = [NSString stringWithUTF8String:root];
+            while (rootPath.length > 1 && [rootPath hasSuffix:@"/"]) {
+                rootPath = [rootPath substringToIndex:rootPath.length - 1];
+            }
+            NSString *brandName =
+                [NSString stringWithFormat:@".jbroot-%016llX", (unsigned long long)jbrand()];
+            if (!rootPath || ![rootPath.lastPathComponent isEqual:brandName]) {
+                return Emit(Failure(@"paired-root-conflict"));
+            }
+            /* Official Bootstrap pairs this exact brand beneath the fixed
+             * AppGroup parent. Never infer a secondary root from link text. */
+            NSString *pairedDataRoot = [[@"/var/mobile/Containers/Shared/AppGroup"
+                stringByAppendingPathComponent:brandName] stringByAppendingPathComponent:@"var"];
+            QHFileManager *manager = [[QHFileManager alloc] initWithRoot:rootPath
                                                              systemHosts:@"/etc/hosts"
-                                                           expectedOwner:0];
+                                                           expectedOwner:0
+                                                          pairedDataRoot:pairedDataRoot];
             NSMutableDictionary *result = [[manager handleCommand:command request:request] mutableCopy];
             BOOL changed = [result[@"changed"] boolValue];
             if (!status && (changed || ([result[@"ok"] boolValue] && [command isEqual:@"reload"]))) {

@@ -7,6 +7,13 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)initWithRoot:(NSString *)mappedJbroot
                  systemHosts:(NSString *)rawSystemPath
                expectedOwner:(uid_t)uid;
+/* pairedDataRoot is the helper-computed secondary root's fixed /var path.
+ * Production derives it from jbrand and the fixed AppGroup parent; it is never
+ * accepted from a command request. Passing nil retains isolated legacy fixtures. */
+- (instancetype)initWithRoot:(NSString *)mappedJbroot
+                 systemHosts:(NSString *)rawSystemPath
+               expectedOwner:(uid_t)uid
+              pairedDataRoot:(nullable NSString *)pairedDataRoot;
 - (NSDictionary *)handleCommand:(NSString *)command request:(NSDictionary *)request;
 @end
 #ifdef QH_TESTING

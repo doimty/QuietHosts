@@ -1,6 +1,10 @@
 # 静域 / QuietHosts
 
-Native UIKit Hosts source manager for iOS15+ RootHide. Candidate0.1.0, not device-validated yet.
+Native UIKit Hosts source manager for iOS15+ RootHide. Candidate `0.1.0-1+native2` (bundle build2); installation and apply/restore still require device acceptance.
+
+Native2 adapts the verified split-root layout: primary root and paired routing var may be UID501, protected etc/private/paired-root/lib/state must retain the expected root ownership. Paired paths and backlink are independently derived and checked, not arbitrary symlink targets. Only a regular file containing the three conventional localhost/broadcasthost mappings becomes eligible for **explicit backup-and-adopt confirmation**; its exact original bytes, owner/group and mode are restored on Disable. Other regular files remain conflicts. Error codes are shown on Home, error dialogs and Advanced information.
+
+Directory FDs and routing timestamps detect namespace changes, including move-away/move-back, but do not make check-plus-write atomic. A last-check race can change the known protected target before a subsequent guard detects the race; tests assert failure with retained journal/backup, not a false zero-write guarantee. See `docs/NATIVE2.md`.
 
 Three pages: Home, Rules, Settings. Muted teal/warm-white/graphite design; system/light/dark themes; no fake statistics. Local/URL/pasted Hosts and bare-domain sources, exact allowlist, preview before source changes, then separate checked Apply. Manual URL updates are all-or-nothing; no periodic downloads, per-domain DNS pre-resolution, VPN, or extra DNS hooks.
 
@@ -10,7 +14,7 @@ Three pages: Home, Rules, Settings. Muted teal/warm-white/graphite design; syste
 - No dependency binaries packaged in this project. CCAdsBeGone conflicts prevent two independent managers; uninstalling that package has its own restore behavior, so inspect your current Hosts first.
 
 ## Safety
-RootHide's `/etc/hosts` directory entry may be a system-file mirror symlink. The helper will not write through it. First takeover accepts only a verified system mirror or absent entry and refuses unknown regular targets/secondary `hosts.lmb`. It keeps a root-owned baseline, validates generated contents, checks revision/fingerprints, uses a durable journal and atomic sibling replacement, restores the original entry on Disable, and refuses foreign-file conflicts. Backup state is retained on uninstall. Unknown/corrupt state is not silently reset.
+RootHide's `/etc/hosts` directory entry may be a system-file mirror symlink. The helper will not write through it. First takeover accepts a verified system mirror or absent entry, or a verified basic regular file only after explicit adoption consent; it refuses other regular targets and any secondary `hosts.lmb`. It keeps a root-owned baseline, validates generated contents, checks revision/fingerprints, uses a durable journal and atomic sibling replacement, restores the original entry on Disable, and refuses foreign-file conflicts. Backup state is retained on uninstall. Unknown/corrupt state is not silently reset.
 
 The App runs as the ordinary mobile user. The restricted helper is root-owned/setuid, accepts only fixed commands and input through bounded stdin; no arbitrary file path or executable API. This is local uid-based authorization, **not cryptographic authentication of only our app**. A privileged/root compromise is outside the claimed boundary.
 

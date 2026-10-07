@@ -447,7 +447,8 @@ static void BaselinesAndCorruption(void) {
             }
             if ([corruption isEqual:@"version"] || [corruption isEqual:@"active-type"]) {
                 NSMutableDictionary *bad = [metadata mutableCopy];
-                bad[[corruption isEqual:@"version"] ? @"version" : @"active"] = @2;
+                bad[[corruption isEqual:@"version"] ? @"version" : @"active"] =
+                    [corruption isEqual:@"version"] ? @999 : @2;
                 Put(state, [NSJSONSerialization dataWithJSONObject:bad options:0 error:NULL], 0600);
             }
             if ([corruption isEqual:@"baseline"]) {
@@ -533,6 +534,11 @@ static NSDictionary *ApplyRequest(QHFixture *f) {
     };
 }
 static void CrashRecovery(void);
+static void DirectoryLayouts(void);
+static void DirectoryLayoutRefusals(void);
+static void DirectoryLayoutRaces(void);
+/* Defined only in QHFileManager.m under QH_TESTING; not public helper API. */
+extern void QHSetDirectoryMutationHook(NSString *point, void (^mutation)(void));
 NSUInteger RunFileManagerTests(void) {
     failures = 0;
     @autoreleasepool {
@@ -546,6 +552,9 @@ NSUInteger RunFileManagerTests(void) {
     }
     @autoreleasepool {
         CrashRecovery();
+        DirectoryLayouts();
+        DirectoryLayoutRefusals();
+        DirectoryLayoutRaces();
     }
     NSLog(@"FileManagerTests: %lu failures", (unsigned long)failures);
     return failures;
@@ -611,4 +620,296 @@ static void CrashRecovery(void) {
             }
         }
     }
+}
+
+/* Root-owned production components are modelled by expectedOwner=getuid(), not
+ * chown/fakeroot. UID0/501 distinctions use the production C predicate suite. */
+static void VarLayout(QHFixture *f, NSString *text) {
+    NSString *private = [f.root stringByAppendingPathComponent:@"private"];
+    NSString *var = [f.root stringByAppendingPathComponent:@"var"];
+    Require(mkdir(private.fileSystemRepresentation, 0755) == 0);
+    Require(rename(var.fileSystemRepresentation,
+                   [private stringByAppendingPathComponent:@"var"].fileSystemRepresentation) == 0);
+    Require(symlink(text.fileSystemRepresentation, var.fileSystemRepresentation) == 0);
+    for (NSString *relative in @[ @"", @"etc", @"private", @"private/var", @"private/var/lib" ]) {
+        Require(chmod([f.root stringByAppendingPathComponent:relative].fileSystemRepresentation, 0755) == 0);
+    }
+}
+static void CheckLink(NSString *path, NSString *text, NSString *label) {
+    char buffer[PATH_MAX];
+    ssize_t n = readlink(path.fileSystemRepresentation, buffer, sizeof(buffer));
+    NSData *expected = Text(text);
+    Check(n >= 0 && (NSUInteger)n == expected.length && !memcmp(buffer, expected.bytes, expected.length),
+          label);
+}
+static void DirectoryLayouts(void) {
+    for (NSString *text in @[ @"private/var", @"private/var/" ]) {
+        for (NSNumber *mirror in @[ @NO, @YES ]) {
+            @autoreleasepool {
+                QHFixture *f = Fixture(mirror.boolValue);
+                VarLayout(f, text);
+                NSDictionary *link = Capture(f.root)[@"var"];
+                NSDictionary *s = f.status;
+                Check([s[@"ok"] boolValue] && [s[@"state"] isEqual:@"unmanaged"],
+                      @"legitimate var link passes initial status (prepatch unsafe-directory)");
+                Check(![NSFileManager.defaultManager fileExistsAtPath:f.state], @"layout status read-only");
+                if (![s[@"ok"] boolValue]) {
+                    continue;
+                } // already recorded the specific initial failure
+                NSDictionary *r = [f apply:Blocks() count:1 revision:s[@"revision"] ?: @""];
+                Check([r[@"ok"] boolValue] && [r[@"state"] isEqual:@"active"], @"var link first apply");
+                if (![r[@"ok"] boolValue]) {
+                    continue;
+                }
+                Check([NSFileManager.defaultManager
+                          fileExistsAtPath:[f.root stringByAppendingPathComponent:
+                                                       @"private/var/lib/quiethosts/original.bin"]],
+                      @"state uses only fixed private/var/lib chain");
+                r = [f command:@"disable"];
+                Check([r[@"ok"] boolValue] && [r[@"state"] isEqual:@"inactive"], @"var link disable");
+                if (mirror.boolValue) {
+                    CheckLink(f.target, f.raw, @"hosts mirror exact original restored with var link");
+                } else {
+                    struct stat st;
+                    Check(lstat(f.target.fileSystemRepresentation, &st) < 0 && errno == ENOENT,
+                          @"missing hosts restored with var link");
+                }
+                r = [f command:@"enable"];
+                Check([r[@"ok"] boolValue] && [r[@"state"] isEqual:@"active"], @"var link reenable");
+                r = [f.manager handleCommand:@"restore-for-uninstall" request:@{}];
+                Check([r[@"ok"] boolValue] && [r[@"state"] isEqual:@"inactive"], @"var link checked restore");
+                Check([link isEqual:Capture(f.root)[@"var"]], @"var link inode/mode/text never rewritten");
+                [f checkRaw];
+            }
+        }
+        for (NSString *point in @[
+                 @"after-journal", @"after-backup", @"after-rename-before-sync", @"after-target",
+                 @"recoverstate", @"after-state", @"after-journal-clear"
+             ]) {
+            @autoreleasepool {
+                QHFixture *f = Fixture(YES);
+                VarLayout(f, text);
+                NSDictionary *link = Capture(f.root)[@"var"];
+                Crash(f, @"apply", ApplyRequest(f), point);
+                NSDictionary *r = f.status;
+                Check([r[@"ok"] boolValue] && [r[@"state"] isEqual:@"active"], @"var link journal replay");
+                Check([[f command:@"disable"][@"ok"] boolValue], @"replayed var link disables safely");
+                CheckLink(f.target, f.raw, @"replayed layout restores exact hosts mirror");
+                Check([link isEqual:Capture(f.root)[@"var"]], @"recovery never changes var link");
+                [f checkRaw];
+            }
+        }
+    }
+}
+static void DirectoryLayoutRefusals(void) {
+    for (NSString *text in @[ @"private/var", @"private/var/" ]) {
+        QHFixture *f = Fixture(NO);
+        VarLayout(f, text);
+        NSData *unknown = Text(@"# unknown existing regular hosts; not adopted\n127.0.0.1 localhost\n");
+        Put(f.target, unknown, 0644);
+        NSDictionary *before = Capture(f.directory);
+        for (NSString *command in @[ @"status", @"apply", @"disable", @"enable", @"restore-for-uninstall" ]) {
+            NSDictionary *request = [command isEqual:@"status"] || [command isEqual:@"restore-for-uninstall"]
+                                        ? @{}
+                                        : ([command isEqual:@"apply"] ? @{
+                                              @"expectedRevision" : @"unknown",
+                                              @"hostsBase64" : [Blocks() base64EncodedStringWithOptions:0],
+                                              @"domainCount" : @1
+                                          }
+                                                                      : @{@"expectedRevision" : @"unknown"});
+            NSDictionary *r = [f.manager handleCommand:command request:request];
+            Check(![r[@"ok"] boolValue] && [r[@"errorCode"] isEqual:@"unmanaged-target"],
+                  @"regular hosts still explicitly unmanaged-target after layout correction");
+            Check([before isEqual:Capture(f.directory)],
+                  @"unknown regular target and all artifacts preserved");
+            Check(![NSFileManager.defaultManager fileExistsAtPath:f.state], @"no adoption or state creation");
+        }
+        [f checkRaw];
+    }
+    for (NSString *text in @[
+             @"/private/var", @"../private/var", @"private/../var", @"private//var", @"private/var//",
+             @"private/var/.", @"./private/var", @"private/var\n", @"other"
+         ]) {
+        QHFixture *f = Fixture(YES);
+        VarLayout(f, text);
+        NSDictionary *before = Capture(f.directory);
+        NSDictionary *r = [f.manager handleCommand:@"apply"
+                                           request:@{
+                                               @"expectedRevision" : @"unknown",
+                                               @"hostsBase64" : [Blocks() base64EncodedStringWithOptions:0],
+                                               @"domainCount" : @1
+                                           }];
+        Check(![r[@"ok"] boolValue] && [r[@"errorCode"] isEqual:@"unsafe-directory"],
+              @"nonexact var link refused");
+        Check([before isEqual:Capture(f.directory)], @"invalid link preserved without following");
+        [f checkRaw];
+    }
+    for (NSString *part in @[
+             @"private", @"private/var", @"private/var/lib", @"state", @"root-link", @"root-link-trailing",
+             @"root-mode", @"private-mode", @"var-mode", @"lib-mode", @"lib-special", @"state-mode"
+         ]) {
+        QHFixture *f = Fixture(YES);
+        VarLayout(f, @"private/var/");
+        if ([part hasPrefix:@"root-link"]) {
+            NSString *alias = [f.directory stringByAppendingPathComponent:@"root-link"];
+            Require(symlink(f.root.fileSystemRepresentation, alias.fileSystemRepresentation) == 0);
+            if ([part isEqual:@"root-link-trailing"]) {
+                alias = [alias stringByAppendingString:@"/"];
+            }
+            f.manager = [[QHFileManager alloc] initWithRoot:alias systemHosts:f.raw expectedOwner:getuid()];
+        } else if ([part hasSuffix:@"mode"] || [part isEqual:@"lib-special"]) {
+            NSDictionary *paths = @{
+                @"root-mode" : @"",
+                @"private-mode" : @"private",
+                @"var-mode" : @"private/var",
+                @"lib-mode" : @"private/var/lib",
+                @"lib-special" : @"private/var/lib",
+                @"state-mode" : @"private/var/lib/quiethosts"
+            };
+            NSString *path = [f.root stringByAppendingPathComponent:paths[part]];
+            if ([part isEqual:@"state-mode"]) {
+                Require(mkdir(path.fileSystemRepresentation, 0700) == 0);
+            }
+            mode_t mode =
+                [part isEqual:@"state-mode"] ? 0755 : ([part isEqual:@"lib-special"] ? 02755 : 0775);
+            Require(chmod(path.fileSystemRepresentation, mode) == 0);
+        } else {
+            NSString *path = [part isEqual:@"state"] ? f.state : [f.root stringByAppendingPathComponent:part];
+            NSString *moved = [f.directory stringByAppendingPathComponent:@"detached"];
+            if ([part isEqual:@"state"]) {
+                Require(mkdir(path.fileSystemRepresentation, 0700) == 0);
+            }
+            Require(rename(path.fileSystemRepresentation, moved.fileSystemRepresentation) == 0);
+            Require(symlink(moved.fileSystemRepresentation, path.fileSystemRepresentation) == 0);
+        }
+        NSDictionary *before = Capture(f.directory);
+        NSDictionary *r = [f.manager handleCommand:@"apply"
+                                           request:@{
+                                               @"expectedRevision" : @"unknown",
+                                               @"hostsBase64" : [Blocks() base64EncodedStringWithOptions:0],
+                                               @"domainCount" : @1
+                                           }];
+        Check(![r[@"ok"] boolValue] && [r[@"errorCode"] isEqual:@"unsafe-directory"],
+              [@"protected component refuses link/mode: " stringByAppendingString:part]);
+        Check([before isEqual:Capture(f.directory)], @"unsafe protected components unchanged");
+        [f checkRaw];
+    }
+}
+/* Replace the name but retain the original child inode alive through its FD.
+ * Merely fstat'ing the child (without checking the parent's entry) is insufficient. */
+static void MutateLayout(QHFixture *f, NSString *part) {
+    if ([part isEqual:@"var-link"] || [part isEqual:@"var-link-text"]) {
+        NSString *path = [f.root stringByAppendingPathComponent:@"var"];
+        Require(
+            rename(path.fileSystemRepresentation,
+                   [f.directory stringByAppendingPathComponent:@"old-var-link"].fileSystemRepresentation) ==
+            0);
+        Require(symlink([part isEqual:@"var-link"] ? "private/var/" : "private/var",
+                        path.fileSystemRepresentation) == 0);
+    } else if ([part isEqual:@"var-link-time"]) {
+        NSString *path = [f.root stringByAppendingPathComponent:@"var"];
+        struct stat s;
+        Require(lstat(path.fileSystemRepresentation, &s) == 0);
+        struct timespec times[] = {s.st_atimespec, s.st_mtimespec};
+        times[1].tv_sec += 10;
+        Require(utimensat(AT_FDCWD, path.fileSystemRepresentation, times, AT_SYMLINK_NOFOLLOW) == 0);
+    } else if ([part isEqual:@"var-link-mode"]) {
+        NSString *path = [f.root stringByAppendingPathComponent:@"var"];
+        struct stat s;
+        Require(lstat(path.fileSystemRepresentation, &s) == 0);
+        Require(lchmod(path.fileSystemRepresentation, (s.st_mode & 0777) ^ 0100) == 0);
+    } else if ([part isEqual:@"root-mode"]) {
+        Require(chmod(f.root.fileSystemRepresentation, 0700) == 0); // still safe, but not original0755
+    } else {
+        NSString *path = [part isEqual:@"root"] ? f.root : [f.root stringByAppendingPathComponent:part];
+        NSString *moved = [f.directory stringByAppendingPathComponent:@"detached"];
+        Require(rename(path.fileSystemRepresentation, moved.fileSystemRepresentation) == 0);
+        Require(mkdir(path.fileSystemRepresentation, 0700) == 0);
+    }
+}
+static void DirectoryLayoutRaces(void) {
+    for (NSString *part in @[
+             @"root", @"root-mode", @"etc", @"private", @"private/var", @"private/var/lib",
+             @"private/var/lib/quiethosts", @"var-link", @"var-link-text", @"var-link-time", @"var-link-mode"
+         ]) {
+        @autoreleasepool {
+            QHFixture *f = Fixture(YES);
+            VarLayout(f, @"private/var/");
+            NSDictionary *s = f.status;
+            Check([s[@"ok"] boolValue], @"race fixture initial layout accepted");
+            NSDictionary *r = [f apply:Blocks() count:1 revision:s[@"revision"] ?: @""];
+            Check([r[@"ok"] boolValue], @"race fixture active");
+            if (![r[@"ok"] boolValue]) {
+                continue;
+            }
+            __block NSDictionary *atMutation = nil;
+            QHSetDirectoryMutationHook(@"prepare-snapshot", ^{
+                MutateLayout(f, part);
+                atMutation = Capture(f.directory);
+            });
+            r = [f.manager handleCommand:@"disable" request:@{@"expectedRevision" : r[@"revision"]}];
+            QHSetDirectoryMutationHook(nil, nil);
+            Check(atMutation != nil && ![r[@"ok"] boolValue] && ![r[@"changed"] boolValue] &&
+                      [r[@"errorCode"] isEqual:@"directory-raced"],
+                  [@"write detects pinned component change: " stringByAppendingString:part]);
+            Check([atMutation isEqual:Capture(f.directory)],
+                  @"race refuses writes in detached or replacement tree");
+            [f checkRaw];
+        }
+    }
+    /* Test every write phase, including first state creation and recovery-only
+     * writes after the target is already renamed. Prior successful writes may
+     * exist, but absolutely no writes may occur after the injected substitution. */
+    for (NSString *point in @[
+             @"create-state", @"create-lock", @"prepare-snapshot", @"prepare-backup", @"stage-target",
+             @"prepare-journal", @"commit-backup", @"commit-target", @"commit-state", @"clear-journal"
+         ]) {
+        @autoreleasepool {
+            QHFixture *f = Fixture(YES);
+            VarLayout(f, @"private/var/");
+            NSDictionary *request = ApplyRequest(f);
+            __block NSDictionary *atMutation = nil;
+            QHSetDirectoryMutationHook(point, ^{
+                MutateLayout(f, @"var-link");
+                atMutation = Capture(f.directory);
+            });
+            NSDictionary *r = [f.manager handleCommand:@"apply" request:request];
+            QHSetDirectoryMutationHook(nil, nil);
+            Check(atMutation != nil && ![r[@"ok"] boolValue] && [r[@"errorCode"] isEqual:@"directory-raced"],
+                  [@"all write phases validate link: " stringByAppendingString:point]);
+            Check([atMutation isEqual:Capture(f.directory)], @"no write or cleanup after link substitution");
+            [f checkRaw];
+        }
+    }
+    for (NSString *point in @[ @"commit-backup", @"commit-target", @"commit-state", @"clear-journal" ]) {
+        QHFixture *f = Fixture(YES);
+        VarLayout(f, @"private/var/");
+        Crash(f, @"apply", ApplyRequest(f), @"after-journal");
+        __block NSDictionary *atMutation = nil;
+        QHSetDirectoryMutationHook(point, ^{
+            MutateLayout(f, @"private");
+            atMutation = Capture(f.directory);
+        });
+        NSDictionary *r = f.status;
+        QHSetDirectoryMutationHook(nil, nil);
+        Check(atMutation != nil && ![r[@"ok"] boolValue] && [r[@"errorCode"] isEqual:@"directory-raced"],
+              @"fresh status recovery validates fixed private ancestor before writes");
+        Check([atMutation isEqual:Capture(f.directory)],
+              @"recovery preserves detached journals and backup artifacts");
+        [f checkRaw];
+    }
+    /* Existing real-var topology also pins the parent entry, not just its FD. */
+    QHFixture *f = Fixture(YES);
+    NSDictionary *request = ApplyRequest(f);
+    __block NSDictionary *atMutation = nil;
+    QHSetDirectoryMutationHook(@"create-state", ^{
+        MutateLayout(f, @"var");
+        atMutation = Capture(f.directory);
+    });
+    NSDictionary *r = [f.manager handleCommand:@"apply" request:request];
+    QHSetDirectoryMutationHook(nil, nil);
+    Check(atMutation != nil && [r[@"errorCode"] isEqual:@"directory-raced"],
+          @"real var directory substitution rejected");
+    Check([atMutation isEqual:Capture(f.directory)], @"real var race creates no state in detached subtree");
+    [f checkRaw];
 }

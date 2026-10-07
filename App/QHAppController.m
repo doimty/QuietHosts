@@ -3,6 +3,7 @@
 #import "QHDownload.h"
 #import "../Shared/QHBridge.h"
 #import "../Shared/QHLocalization.h"
+#import "../Shared/QHStatusPresentation.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <notify.h>
 
@@ -345,20 +346,7 @@ static BOOL Animate(void) {
     return QHL(@"State unavailable");
 }
 - (NSString *)statusExplanation:(NSDictionary *)status {
-    if (!status) {
-        return QHL(@"Checking file state");
-    }
-    if ([status[@"state"] isEqual:@"conflict"] || [status[@"errorCode"] isEqual:@"baseline-conflict"]) {
-        return QHL(@"Existing Hosts or helper state conflicts with this request. Review Advanced information "
-                   @"and resolve the external conflict; nothing will be deleted automatically.");
-    }
-    if (![status[@"ok"] boolValue]) {
-        return QHL(
-            @"The helper could not verify file state. Check the native RootHide package and dependencies, "
-            @"then check again. Do not remove existing Hosts files to force activation.");
-    }
-    return QHL(@"This is verified file state, not a DNS or traffic protection test. Apps may retain cached "
-               @"DNS results.");
+    return QHStatusExplanation(status);
 }
 - (void)addHeading:(NSString *)text to:(UIStackView *)stack {
     [stack addArrangedSubview:Label(text, UIFontTextStyleHeadline, NO)];
@@ -625,6 +613,7 @@ static BOOL Animate(void) {
                     @"sources: this app's Application Support/QuietHosts. Source URLs are private local "
                     @"refresh metadata. No arbitrary path operations are available."),
                 detail];
+        detail = [[self statusExplanation:self.status] stringByAppendingFormat:@"\n\n%@", detail];
     }
     UIAlertController *alert = [UIAlertController
         alertControllerWithTitle:advanced ? QHL(@"Advanced information") : QHL(@"Backup and restore")
@@ -1111,21 +1100,35 @@ static BOOL Animate(void) {
             }
             // Capture revision ONCE before the preview. Never fetch a new revision on Save.
             NSString *expectedRevision = [status[@"revision"] copy];
+            BOOL adoption = QHStatusRequiresAdoption(status);
             [weak
                 showPreview:draft
-                      title:QHL(@"Apply local draft")
+                      title:adoption ? QHL(@"Back up and adopt basic Hosts") : QHL(@"Apply local draft")
                      detail:
-                         QHL(@"The helper will validate and atomically apply this generated blocklist. "
-                             @"Existing baseline mappings are never silently overridden. A concurrent helper "
-                             @"change rejects this preview. Applying files does not prove DNS filtering.")
-                     button:QHL(@"Confirm Apply")
+                         adoption
+                             ? QHL(@"You are authorizing QuietHosts to take over the existing basic Hosts "
+                                   @"file. The helper will preserve its exact contents and permissions "
+                                   @"before applying this draft. Disable restores that saved file. If the "
+                                   @"file or directory mapping changes after this preview, the operation is "
+                                   @"refused. No directory ownership or links will be repaired "
+                                   @"automatically.")
+                             : QHL(@"The helper will validate and atomically apply this generated blocklist. "
+                                   @"Existing baseline mappings are never silently overridden. A concurrent "
+                                   @"helper "
+                                   @"change rejects this preview. Applying files does not prove DNS "
+                                   @"filtering.")
+                     button:adoption ? QHL(@"Confirm backup and Apply") : QHL(@"Confirm Apply")
                     confirm:^{
                         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-                            NSDictionary *payload = @{
+                            NSMutableDictionary *payload = [@{
                                 @"expectedRevision" : expectedRevision,
                                 @"hostsBase64" : [draft.compiled.hostsData base64EncodedStringWithOptions:0],
                                 @"domainCount" : @(draft.compiled.domains.count)
-                            };
+                            } mutableCopy];
+                            // Send consent only from this explicitly approved first-apply preview.
+                            if (adoption) {
+                                payload[@"adoptExistingHosts"] = @YES;
+                            }
                             dispatch_async(dispatch_get_main_queue(), ^{
                                 [QHBridge request:@"apply"
                                           payload:payload

@@ -1,0 +1,19 @@
+# Device layout and diagnostic fix
+
+> **Second device observation supersedes the simple private/var assumption below.** The root-owned `private` directory contains `private/var` as a symlink shown by the native terminal as `/rootfs/var/mobile/Containers/Shared/AppGroup/.jbroot-<same-brand>/var/`. The `/rootfs` prefix may be a libvroot presentation translation; do not blindly treat terminal readlink text as the raw target seen by the native helper. The current local patch stops at `openat(privateFD,"var",O_NOFOLLOW)` and is therefore not yet a complete device fix. Official split-root mapping must be verified before implementing the second link. Do not generalize to arbitrary symlink following or change device ownership/links.
+>
+> The displayed 213B regular Hosts contains only the three conventional localhost/broadcasthost entries plus comments. This supports a narrowly scoped **explicit adoption preview** after content/metadata revalidation, not silent takeover or deletion. Proposed adoption must snapshot the exact original regular file and restore those bytes/mode on disable; it must not assume it was byte-identical to the raw system Hosts. Existing non-default regular Hosts must still refuse without a separate migration design. No real device modifications have been authorized/executed by the assistant.
+
+Base60f2a5adf3994f022b422cb643a31d5c2a21eb01, newbranchfix/device-layout-diagnostics. User provided actual native terminal metadata: mapped jbroot directory0755 owner501:501; etc0755 owner0:0; var is root-owned symlink `private/var/`; var/lib0755 owner0:0; hosts root-owned regular0644 213B; hosts.lmb and our state directory absent. Do not retain the randomized actual root name in product code.
+
+## Confirmed diagnosis
+CheckDir onroot requiresuid0 beforeanyotherwork and rejects observeduid501. openState O_NOFOLLOW|O_DIRECTORY ofvar also rejects observedsymlink iffirstguardisfixed. Evenafterbothfixes, regularhosts muststillbeunmanaged-target. Cannotinfer itsorigin/contentfrom213B; notsafe todelete/adoptit. NoinstalledhelpererrorCode yet, so source-order predicts first rejection, not a capturederror.
+
+## Allowed change
+- Add narrow container-root ownership rule: rootdirectoryonly canbeuid0 ormobile501, type actualdirectory, nogroup/otherwrite andno specialmodebits, anchoredidentity throughouttransaction. All protected children/state/backups remainexpectedrootuid; nevergloballyrelaxCheckDir or O_NOFOLLOW.
+- Recognizeonly var realdirectory or root-owned singlelink with exacttext `private/var` or `private/var/`. Traversethe fixed private/var chainusingdirFD nofolloweachcomponent and checkeachrootownership,mode/inode. Pinlinkidentityandtext andanchoredcomponentidentities acrosswrites; rejectabsolute/traversing/foreignchain andsymlink/unsafeprivate/lib/state. Existing directorylayout stayssupported.
+- Nevertakeoverregularhosts inthispatch. Preserve existingdata and refusewithspecificdiagnostics.
+- ShowstablehelpererrorCode plus actionablegenerictranslatedexplanationinstatus/advanced. NoURLs/rawhostcontent/randomrootpathexposure. Formatmalformed/missingcodes safely.
+
+## Tests and failure signals
+RealproductiondirectorypredicatehostCfixture uid0/501/other/special/writablemode; nativeend-to-end fixturesbothvar layouts withsuccessful apply/disable/rawhashunchanged, unknownregularstillrefuses, badlinktargets/intermediates/owner/mode/racedlink拒绝; preserveall existingnative suites. Oldcode negativefails on legitimatevarlink. UI diagnosticcomponent has macOSFoundation teststhatcheckstablecodes/malformedvalues, sourceintegrationandlocaleparitychecks. Appletestexecutiononlycloud ifbuilt; localtestsnotdeviceacceptance. Noactualdevicecommandsorinstall/restart. No LetMeBlock/libsandy/CC/runtimefilterchanges. Ifonlylocalcandidate reportexplicitly; do not claim rootcausefullyresolvedwhileunknownregularremains.
