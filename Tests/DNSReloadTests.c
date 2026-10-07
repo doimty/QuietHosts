@@ -35,15 +35,8 @@ int main(int argc, char **argv) {
             strcmp(argv[3], "mDNSResponderHelper")) {
             return 90;
         }
-        gid_t groups[2];
+        gid_t groups[2] = {0};
         int groupCount = getgroups(2, groups);
-        if (getuid() != 0 || geteuid() != 0 || getgid() != 0 || getegid() != 0 || groupCount != 1 ||
-            groups[0] != 0) {
-            return 91;
-        }
-        if (getenv("QH_TEST_SENTINEL") || getenv("DYLD_INSERT_LIBRARIES")) {
-            return 92;
-        }
         char file[4096];
         if (snprintf(file, sizeof(file), "%s.receipt", argv[0]) >= (int)sizeof(file)) {
             return 93;
@@ -52,11 +45,23 @@ int main(int argc, char **argv) {
         if (fd < 0) {
             return 94;
         }
-        char text[] = "root identities; fixed argv; minimal environment";
-        if (write(fd, text, sizeof(text) - 1) != (ssize_t)(sizeof(text) - 1)) {
+        char text[256];
+        int length = snprintf(text, sizeof(text), "uid=%u/%u gid=%u/%u groups=%d [%u,%u] sentinel=%d dyld=%d",
+                              (unsigned)getuid(), (unsigned)geteuid(), (unsigned)getgid(),
+                              (unsigned)getegid(), groupCount, (unsigned)groups[0], (unsigned)groups[1],
+                              getenv("QH_TEST_SENTINEL") != NULL, getenv("DYLD_INSERT_LIBRARIES") != NULL);
+        if (length < 0 || (size_t)length >= sizeof(text) || write(fd, text, (size_t)length) != length) {
+            close(fd);
             return 95;
         }
         close(fd);
+        if (getuid() != 0 || geteuid() != 0 || getgid() != 0 || getegid() != 0 || groupCount != 1 ||
+            groups[0] != 0) {
+            return 91;
+        }
+        if (getenv("QH_TEST_SENTINEL") || getenv("DYLD_INSERT_LIBRARIES")) {
+            return 92;
+        }
         if (strstr(argv[0], "tool-fail")) {
             return 7;
         }
@@ -97,6 +102,21 @@ int main(int argc, char **argv) {
     uid_t real = getuid(), effective = geteuid();
     gid_t group = getgid(), egroup = getegid();
     QHDNSReloadResult r = QHRunDNSReload(ok, 3, &watched);
+    if (r.stage != QHDNSReloadOK || r.exitStatus != 0 || watched != 0) {
+        fprintf(stderr, "DNS mock result stage=%d errno=%d exit=%d signal=%d watched=%d\n", r.stage,
+                r.systemError, r.exitStatus, r.termSignal, (int)watched);
+        char receiptPath[4096], details[512];
+        snprintf(receiptPath, sizeof(receiptPath), "%s.receipt", ok);
+        int fd = open(receiptPath, O_RDONLY);
+        ssize_t n = fd >= 0 ? read(fd, details, sizeof(details) - 1) : -1;
+        if (fd >= 0) {
+            close(fd);
+        }
+        if (n > 0) {
+            details[n] = 0;
+            fprintf(stderr, "DNS mock child credentials: %s\n", details);
+        }
+    }
     CHECK(r.stage == QHDNSReloadOK && r.exitStatus == 0 && watched == 0);
     CHECK(getuid() == real && geteuid() == effective && getgid() == group && getegid() == egroup);
     r = QHRunDNSReload(fail, 3, &watched);
