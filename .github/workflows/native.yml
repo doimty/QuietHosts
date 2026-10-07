@@ -41,6 +41,8 @@ jobs:
           set -euo pipefail
           deb=packages/com.doimty.quiethosts_0.1.0-1+native1_iphoneos-arm64e.deb
           test -f "$deb"
+          python3 ci/canonicalize_deb.py "$deb" | tee build-metadata/ownership-repack.txt
+          python3 scripts/check_package_ownership.py "$deb" | tee build-metadata/ownership-check.txt
           mkdir -p "$RUNNER_TEMP/qh-package"
           dpkg-deb -x "$deb" "$RUNNER_TEMP/qh-package"
           dpkg-deb -e "$deb" "$RUNNER_TEMP/qh-package/DEBIAN"
