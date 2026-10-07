@@ -28,11 +28,13 @@ static void SRCheck(BOOL condition, NSString *label) {
         NSLog(@"SplitRootTests FAIL: %@", label);
     }
 }
-static void SRRequire(BOOL condition) {
+static void SRRequireAt(BOOL condition, int line, const char *expression) {
     if (!condition) {
+        fprintf(stderr, "SplitRoot fixture failed line %d errno=%d: %s\n", line, errno, expression);
         abort();
     }
 }
+#define SRRequire(...) SRRequireAt((__VA_ARGS__), __LINE__, #__VA_ARGS__)
 static NSData *SRText(NSString *text) {
     return [text dataUsingEncoding:NSUTF8StringEncoding];
 }
