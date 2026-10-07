@@ -276,7 +276,7 @@ static void SRValidLayoutAndOwnership(BOOL mixedUID) {
             mixedUID ? @"root: primary uid501 plus paired-var uid501 accepted"
                      : @"ordinary-user split-root fixture uses current UID throughout");
     SRCheckNoState(f, @"status before adoption creates no state directory");
-    f.checkRaw;
+    [f checkRaw];
     if (![status[@"ok"] boolValue]) {
         return;
     }
@@ -292,7 +292,7 @@ static void SRValidLayoutAndOwnership(BOOL mixedUID) {
     }
     SRCheck(lstat(f.raw.fileSystemRepresentation, &st) == 0 && st.st_uid == f.expectedOwner,
             @"raw hosts fixture is expected-owner owned");
-    f.checkRaw;
+    [f checkRaw];
 }
 
 static void SRRegularAdoptionAndRestore(BOOL mixedUID) {
@@ -337,7 +337,7 @@ static void SRRegularAdoptionAndRestore(BOOL mixedUID) {
     SRCheck(lstat(backup.fileSystemRepresentation, &backupStat) == 0 && (backupStat.st_mode & 0777) == 0400 &&
                 backupStat.st_nlink == 1,
             @"adopted baseline backup is private, immutable-mode, single-link");
-    f.checkRaw;
+    [f checkRaw];
 
     NSDictionary *active = f.status;
     NSDictionary *repeat = [f applyRequestWithConsent:nil revision:active[@"revision"] extra:nil];
@@ -354,7 +354,7 @@ static void SRRegularAdoptionAndRestore(BOOL mixedUID) {
     NSDictionary *enabled = [f command:@"enable"];
     SRCheck([enabled[@"ok"] boolValue] && [enabled[@"state"] isEqual:@"active"] && SRTargetBytes(f, combined),
             @"enable rebuilds rules from the immutable original snapshot");
-    f.checkRaw;
+    [f checkRaw];
 }
 
 static void SRAdoptionContractAndBadRegulars(BOOL mixedUID) {
@@ -386,7 +386,7 @@ static void SRAdoptionContractAndBadRegulars(BOOL mixedUID) {
                     [NSString stringWithFormat:@"nondefault regular %@ is rejected by apply", badKind]);
             SRCheck([before isEqual:SRCapture(f.directory)], @"rejected regular candidate is unchanged");
             SRCheckNoState(f, @"rejected nondefault regular never creates adoption state");
-            f.checkRaw;
+            [f checkRaw];
         }
     }
 
@@ -422,7 +422,7 @@ static void SRAdoptionContractAndBadRegulars(BOOL mixedUID) {
                 [inapplicableConsent[@"errorCode"] isEqual:@"adoption-required"],
             @"adoption consent cannot broaden the existing verified-symlink takeover contract");
     SRCheck([mirrorBefore isEqual:SRCapture(mirror.directory)], @"inapplicable consent preserves mirror");
-    mirror.checkRaw;
+    [mirror checkRaw];
 }
 
 static void SRRequireRefusal(QHSplitRootFixture *f, NSString *label) {
@@ -431,7 +431,7 @@ static void SRRequireRefusal(QHSplitRootFixture *f, NSString *label) {
     SRCheck(![status[@"ok"] boolValue], label);
     SRCheck([before isEqual:SRCapture(f.directory)], @"invalid split-root layout status is read-only");
     SRCheckNoState(f, @"invalid split-root layout cannot create private state");
-    f.checkRaw;
+    [f checkRaw];
 }
 static void SRPathAndLinkRefusals(BOOL mixedUID) {
     {
@@ -579,7 +579,7 @@ static void SRCrashRecovery(BOOL mixedUID) {
                         isEqual:original],
                     @"crash recovery promotes exact regular adoption backup");
             SRCheck(SRTargetBytes(f, combined), @"crash recovery commits expected regular target");
-            f.checkRaw;
+            [f checkRaw];
             NSDictionary *disabled = [f command:@"disable"];
             SRCheck([disabled[@"ok"] boolValue] &&
                         [[NSData dataWithContentsOfFile:f.target] isEqual:original],
@@ -599,7 +599,7 @@ static void SRCrashRecovery(BOOL mixedUID) {
     SRCheck([[NSData dataWithContentsOfFile:foreign.target] isEqual:foreignBytes] &&
                 [[NSData dataWithContentsOfFile:journal] length] > 0,
             @"recovery preserves foreign target and diagnostic journal");
-    foreign.checkRaw;
+    [foreign checkRaw];
 }
 
 /* Private seam implemented by QHFileManager.m only under QH_TESTING. */
@@ -628,7 +628,7 @@ static void SRNamespacePostcheckMutation(BOOL mixedUID) {
     SRCheck([NSFileManager.defaultManager
                 fileExistsAtPath:[f.state stringByAppendingPathComponent:@"journal.json"]],
             @"uncertain commit retains recovery journal");
-    f.checkRaw;
+    [f checkRaw];
 }
 
 NSUInteger RunSplitRootTests(BOOL mixedUID) {
