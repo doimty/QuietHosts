@@ -432,6 +432,10 @@ static void SRRequireRefusal(QHSplitRootFixture *f, NSString *label) {
     NSDictionary *status = f.status;
     SRCheck(![status[@"ok"] boolValue], label);
     SRCheck([before isEqual:SRCapture(f.directory)], @"invalid split-root layout status is read-only");
+    if ([[NSFileManager.defaultManager attributesOfItemAtPath:f.state error:NULL] fileSize] ||
+        [NSFileManager.defaultManager fileExistsAtPath:f.state]) {
+        NSLog(@"SplitRoot diagnostic %@ code=%@ statePath=%@", label, status[@"errorCode"], f.state);
+    }
     SRCheckNoState(f, @"invalid split-root layout cannot create private state");
     [f checkRaw];
 }
