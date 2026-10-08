@@ -112,6 +112,14 @@ static UIView *ActionSeparator(void) {
     line.isAccessibilityElement = NO;
     return line;
 }
+static void AddActionRow(UIStackView *stack, BOOL *hasAction, NSString *title, NSString *symbol,
+                         BOOL enabled, void (^action)(void)) {
+    if (*hasAction) {
+        [stack addArrangedSubview:ActionSeparator()];
+    }
+    [stack addArrangedSubview:ActionRow(title, symbol, enabled, action)];
+    *hasAction = YES;
+}
 static NSString *Number(NSUInteger value) {
     return [NSNumberFormatter localizedStringFromNumber:@(value) numberStyle:NSNumberFormatterDecimalStyle];
 }
@@ -469,31 +477,27 @@ static BOOL Animate(void) {
         }
     }
     BOOL hasAction = NO;
-#define QH_ADD_ACTION_ROW(title, icon, enabled, body) \\
-    do { \\
-        if (hasAction) [actions addArrangedSubview:ActionSeparator()]; \\
-        [actions addArrangedSubview:ActionRow((title), (icon), (enabled), (body))]; \\
-        hasAction = YES; \\
-    } while (0)
-    QH_ADD_ACTION_ROW(QHL(@"Manage rule sources"), @"list.bullet", YES, ^{
+    AddActionRow(actions, &hasAction, QHL(@"Manage rule sources"), @"list.bullet", YES, ^{
         weak.rootController.selectedIndex = 1;
     });
     if (self.download) {
-        QH_ADD_ACTION_ROW(QHL(@"Cancel download"), @"xmark.circle", YES, ^{ [weak.download cancel]; });
+        AddActionRow(actions, &hasAction, QHL(@"Cancel download"), @"xmark.circle", YES, ^{
+            [weak.download cancel];
+        });
     } else if (hasURLSources) {
-        QH_ADD_ACTION_ROW(QHL(@"Update online sources"), @"arrow.clockwise", !self.busy, ^{ [weak refreshSources]; });
+        AddActionRow(actions, &hasAction, QHL(@"Update online sources"), @"arrow.clockwise", !self.busy, ^{
+            [weak refreshSources];
+        });
     }
     if ([self statusWritable:self.status] && [self.status[@"state"] isEqual:@"active"]) {
-        QH_ADD_ACTION_ROW(QHL(@"Pause rules and restore original Hosts"), @"pause.circle", !self.busy, ^{
-            [weak prepareHelperCommand:@"disable"];
-        });
+        AddActionRow(actions, &hasAction, QHL(@"Pause rules and restore original Hosts"), @"pause.circle",
+                     !self.busy, ^{ [weak prepareHelperCommand:@"disable"]; });
     } else if ([self statusWritable:self.status] && [self.status[@"state"] isEqual:@"inactive"]) {
-        QH_ADD_ACTION_ROW(QHL(@"Resume saved rules"), @"play.circle", !self.busy, ^{
-            [weak prepareHelperCommand:@"enable"];
-        });
+        AddActionRow(actions, &hasAction, QHL(@"Resume saved rules"), @"play.circle", !self.busy,
+                     ^{ [weak prepareHelperCommand:@"enable"]; });
     }
-    QH_ADD_ACTION_ROW(QHL(@"Refresh file status"), @"arrow.triangle.2.circlepath", !self.busy, ^{ [weak refreshStatus]; });
-#undef QH_ADD_ACTION_ROW
+    AddActionRow(actions, &hasAction, QHL(@"Refresh file status"), @"arrow.triangle.2.circlepath", !self.busy,
+                 ^{ [weak refreshStatus]; });
     [home addArrangedSubview:actions];
     [home addArrangedSubview:Label(self.busy ? QHL(@"Working…")
                                                : QHL(@"Online sources update only when requested. Reimport files or pasted text to refresh them."),

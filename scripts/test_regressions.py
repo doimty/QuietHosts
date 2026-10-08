@@ -32,7 +32,8 @@ with tempfile.TemporaryDirectory(prefix='qh-regressions-') as folder:
  assert '[theme.heightAnchor constraintGreaterThanOrEqualToConstant:44]' in theme
  assert 'self.stack.spacing = 14' in ui and 'card.layoutMargins = UIEdgeInsetsMake(16, 16, 16, 16)' in ui
  home=ui.split('- (void)render {',1)[1].split('- (void)renderRules {',1)[0]
- assert 'QH_ADD_ACTION_ROW' in home and 'ActionSeparator()' in home
+ assert 'AddActionRow(actions, &hasAction' in home and 'ActionSeparator()' in ui
+ assert home.count('AddActionRow(actions, &hasAction') >= 3
  assert 'Button(QHL(@"Apply draft"), YES' in home
  assert 'QHL(@"Draft is stored on this device. Apply it to update managed Hosts.")' in home
  assert 'This draft was saved to the helper in this session.' not in home
