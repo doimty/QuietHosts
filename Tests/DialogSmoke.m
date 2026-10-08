@@ -22,6 +22,9 @@ static UIScrollView *DialogScroll(UIView *view) {
 @property(nonatomic,strong) id keyboardObserver;
 @property(nonatomic) CGRect keyboardFrame;
 @property(nonatomic) BOOL keyboardShown;
+@property(nonatomic,copy) NSString *keyboardReadyPath;
+@property(nonatomic,copy) NSString *keyboardCapturedPath;
+@property(nonatomic,copy) NSString *keyboardCaptureFailedPath;
 @property(nonatomic,copy) void (^completion)(NSUInteger,NSUInteger);
 @property(nonatomic) NSUInteger stage;
 @property(nonatomic) NSUInteger checks;
@@ -66,10 +69,18 @@ static UIScrollView *DialogScroll(UIView *view) {
     });
 }
 - (void)waitForKeyboardCapture:(QHDialogController *)dialog stage:(NSUInteger)stage attempt:(NSUInteger)attempt {
-    NSString *directory=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
-    BOOL captured=[NSFileManager.defaultManager fileExistsAtPath:[directory stringByAppendingPathComponent:@"software-keyboard-captured.flag"]];
-    if(captured || attempt>=100) {
-        [self check:captured name:@"full-screen capture completed before keyboard dismissal"];
+    NSFileManager *files=NSFileManager.defaultManager;
+    BOOL captured=[files fileExistsAtPath:self.keyboardCapturedPath];
+    BOOL failed=[files fileExistsAtPath:self.keyboardCaptureFailedPath];
+    // 120s bound: the CI driver budget for one screenshot on a loaded runner
+    // can exceed the old 20s window; a failure marker still exits immediately.
+    if(captured || failed || attempt>=600) {
+        NSString *reason=failed ? @"driver reported capture failure" : (captured ? @"capture completed" : @"capture flag never appeared; driver budget exceeded");
+        [self check:captured name:[NSString stringWithFormat:@"full-screen capture completed before keyboard dismissal (%@)",reason]];
+        if(!captured) {
+            NSString *ready=[files fileExistsAtPath:self.keyboardReadyPath] ? @"ready flag present" : @"ready flag missing";
+            NSLog(@"DIALOG NOTE keyboard capture diagnostics: %@; %@",reason,ready);
+        }
         [self check:dialog.textFields.firstObject.isFirstResponder name:@"keyboard focus retained during screen capture"];
         [self finishStage:dialog stage:stage];return;
     }
@@ -123,6 +134,10 @@ static UIScrollView *DialogScroll(UIView *view) {
             return;
         }
         self.keyboardShown=NO;
+        NSString *documents=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
+        self.keyboardReadyPath=[documents stringByAppendingPathComponent:@"software-keyboard-ready.flag"];
+        self.keyboardCapturedPath=[documents stringByAppendingPathComponent:@"software-keyboard-captured.flag"];
+        self.keyboardCaptureFailedPath=[documents stringByAppendingPathComponent:@"software-keyboard-capture-failed.flag"];
         self.keyboardObserver=[NSNotificationCenter.defaultCenter addObserverForName:UIKeyboardDidShowNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){
             weak.keyboardShown=YES;weak.keyboardFrame=[note.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
         }];
@@ -137,8 +152,7 @@ static UIScrollView *DialogScroll(UIView *view) {
             CGRect keyboard=[dialog.view.window convertRect:self.keyboardFrame fromWindow:nil];
             [self check:CGRectGetMaxY(fieldRect)<=CGRectGetMinY(keyboard)+1 name:@"active input not hidden by keyboard"];
             [self snapshot:dialog.view.window name:@"dialog-url-keyboard.png"];
-            NSString *documents=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
-            [@"keyboard ready" writeToFile:[documents stringByAppendingPathComponent:@"software-keyboard-ready.flag"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [@"keyboard ready" writeToFile:self.keyboardReadyPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
             [NSNotificationCenter.defaultCenter removeObserver:self.keyboardObserver];self.keyboardObserver=nil;
             // The CI driver captures the complete simulator display. The app's
             // own UIWindow renderer cannot include the separate keyboard window.

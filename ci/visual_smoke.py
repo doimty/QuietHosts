@@ -30,20 +30,31 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
     container=Path(read('xcrun','simctl','get_app_container',identifier,info['CFBundleIdentifier'],'data').strip())
     marker=container/'Documents/software-keyboard-ready.flag'
     captured=container/'Documents/software-keyboard-captured.flag'
-    for flag in (marker,captured):
+    capture_failed=container/'Documents/software-keyboard-capture-failed.flag'
+    for flag in (marker,captured,capture_failed):
         if flag.exists():flag.unlink()
+    # A loaded runner can take well over 20s for one shot, and `simctl io
+    # screenshot` can also hang outright. Attempts are precise-killed on
+    # timeout; the app side bound is 120s and exits at once on this failure
+    # marker, so a stuck driver ends the run with a precise message.
+    shot_timeout=float(os.environ.get('QH_KEYBOARD_SHOT_TIMEOUT','45'))
+    shot_attempts=int(os.environ.get('QH_KEYBOARD_SHOT_ATTEMPTS','3'))
     stop=threading.Event();capture_errors=[]
     def capture_keyboard():
         while not stop.wait(.1):
             if marker.exists():
-                try:
-                    subprocess.run(['xcrun','simctl','io',identifier,'screenshot',str(OUT/'visual-software-keyboard-screen.png')],check=True,timeout=20,capture_output=True)
-                    captured.write_text('captured while first responder held')
-                except Exception as error:capture_errors.append(str(error))
+                for attempt in range(1,shot_attempts+1):
+                    try:
+                        subprocess.run(['xcrun','simctl','io',identifier,'screenshot',str(OUT/'visual-software-keyboard-screen.png')],check=True,timeout=shot_timeout,capture_output=True)
+                        captured.write_text('captured while first responder held; attempt %d' % attempt)
+                        return
+                    except Exception as error:
+                        capture_errors.append('attempt %d: %s' % (attempt,error))
+                capture_failed.write_text('\n'.join(capture_errors))
                 return
     capture=threading.Thread(target=capture_keyboard,daemon=True);capture.start()
     try:
-        launch=subprocess.run(['xcrun','simctl','launch','--console',identifier,info['CFBundleIdentifier'],'-AppleLanguages','(zh-Hans)','-AppleLocale','zh_CN'],cwd=ROOT,capture_output=True,text=True,timeout=150)
+        launch=subprocess.run(['xcrun','simctl','launch','--console',identifier,info['CFBundleIdentifier'],'-AppleLanguages','(zh-Hans)','-AppleLocale','zh_CN'],cwd=ROOT,capture_output=True,text=True,timeout=300)
     except subprocess.TimeoutExpired as error:
         def text(value):return value.decode(errors='replace') if isinstance(value,bytes) else (value or '')
         logs=text(error.stdout)+'\n'+text(error.stderr)
