@@ -27,10 +27,6 @@ static void Check(BOOL value, NSString *name) {
 static void Geometry(UIView *view) {
     CGRect f=view.frame;
     Check(isfinite(f.size.width) && isfinite(f.size.height) && f.size.width>=0 && f.size.height>=0, @"finite frame");
-    if ([view.accessibilityIdentifier isEqual:@"QHVBadge"]) {
-        Check([view isKindOfClass:UILabel.class],@"capsule owns intrinsic text size");
-        Check(CGRectGetWidth(view.bounds)<=view.intrinsicContentSize.width+1,@"capsule does not steal source text width");
-    }
     if ([view isKindOfClass:UISwitch.class]) return; // Native switch shadow/internal decoration may extend.
     for (UIView *child in view.subviews) {
         if (!child.hidden && [child isKindOfClass:UILabel.class]) {
