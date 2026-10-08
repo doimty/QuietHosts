@@ -17,3 +17,11 @@
 基线78a8677 / native10，包native11/build11，仍同一独立feature分支推进；dpkg必须高于native10。保护业务回调、30个安全文件、主体组件及图标冻结。真实UIKit须检查两个用户反馈入口的初始selectedDetentIdentifier为Large，简单确认仍Medium，并保存首次弹出截图。
 
 补齐此前完整键盘屏幕截图时序：由bounded ready/captured回执握手保持first responder，simctl保存完成才允许关闭；上轮固定等待截图捕到了后续页面，不能声称该图片中键盘可见。保留键盘通知/位置断言，不改150秒总限时，手势/取消/weak引用门禁全部保留。
+
+## Native12 · 依赖文案与元数据
+
+收尾改动，局部于 `fix/native12-dependency-copy`（基线 native11 26d4087）。用户要求公开依赖文字不写死测试版本号、不要把产品长期定位限定为 RootHide：高级信息与双语 Localizable 改为“所需依赖：LetMeBlock、libSandy。请安装与你的越狱环境匹配的依赖包。”，control 保留 `com.ps.letmeblock`/`com.opa334.libsandy`/`uikittools` 包ID与 iOS15 最低版本、去掉测试版号下限。诊断正文保留“按当前构建校验路径、不透过系统 Hosts 链接写原文件”与本地来源/隐私说明。
+
+文案改动以可逆映射测试（`Tests/DependencyCopy.json`）记录：`scripts/test_native9_ui.py` 断言新文案恰好出现一次，再逆映射回基线片段后核对原 30 文件/业务回调 SHA 不变，即冻结以证据方式保留而非删除旧冻结。包版本升 `0.1.0-1+native12`、App build12，同步 control/Info.plist/workflow/validate.py；正式版纯数字门禁不放开（native12 仍被 `--release` 拒绝）。
+
+当前二进制仍是 RootHide-only：rootless 适配与 Havoc 付费上架按 `docs/DISTRIBUTION_PLAN.md` 独立规划/实施，本轮不实施、不宣称兼容。依赖文案中立不等于任意同名包可用，架构/签名/读取路径仍须匹配。云端交付收据另记，不预写成功。

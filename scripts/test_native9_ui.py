@@ -52,6 +52,9 @@ def main():
     # names before comparing frozen business code. No handler text is removed.
     normalized=ui.replace('QHDialogController *','UIAlertController *').replace('[QHDialogController','[UIAlertController').replace('dialogControllerWithTitle:','alertControllerWithTitle:').replace('QHDialogAction *','UIAlertAction *').replace('[QHDialogAction','[UIAlertAction')
     normalized=normalized.replace('    QHConfigureModal(nav);\n','')
+    copy=json.loads((ROOT/'Tests/DependencyCopy.json').read_text())
+    assert normalized.count(copy['new'])==1, 'Unexpected dependency-copy change'
+    normalized=normalized.replace(copy['new'],copy['old'])
     for item in golden['methods']:
         assert hashlib.sha256(segment(normalized,item['start'],item['end']).encode()).hexdigest()==item['sha256'], 'Frozen controller routine changed: '+item['start']
     components=(ROOT/'App/QHVisualComponents.m').read_text()

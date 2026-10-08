@@ -693,10 +693,8 @@ static BOOL Animate(void) {
     if (advanced) {
         detail = [NSString
             stringWithFormat:
-            QHL(@"%@\n\nRequired: native RootHide, LetMeBlock 1.3.0-1+native1, libSandy 1.1.6-4. "
-                @"Installed versions are not verified here.\n\nFixed managed entry: "
-                @"jbroot('/etc/hosts'). RootHide may mirror this as a symlink. Only the helper may "
-                @"replace the entry after validation; this app never writes system Hosts.\n\nLocal "
+            QHL(@"%@\n\nDependencies: LetMeBlock and libSandy. Install the packages for your jailbreak environment.\n\nManaged Hosts entry: "
+                @"the helper validates the path for this build before replacing the entry. This app never writes through a system Hosts link.\n\nLocal "
                 @"sources: this app's Application Support/QuietHosts. Source URLs are private local "
                 @"refresh metadata. No arbitrary path operations are available."),
                 detail];
