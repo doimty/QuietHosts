@@ -96,6 +96,7 @@ void QHConfigureModal(UIViewController *controller) {
     if (self.contentBuilt) return;
     NSAssert(self.content && self.mutableActions && self.mutableFields,@"Dialog factory must configure content before first presentation");
     self.contentBuilt=YES;
+    self.content.navigationItem.title=@""; // The card owns the single visible heading.
     QHConfigureModal(self);
     if (!self.mutableFields.count && self.detail.length<500) {
         self.sheetPresentationController.detents=@[UISheetPresentationControllerDetent.mediumDetent,UISheetPresentationControllerDetent.largeDetent];
@@ -138,7 +139,7 @@ void QHConfigureModal(UIViewController *controller) {
     }
     __weak typeof(self) weak=self;
     for (QHDialogAction *action in self.mutableActions) {
-        if (action.style==UIAlertActionStyleCancel) {
+        if (action.style==UIAlertActionStyleCancel && self.mutableActions.count>1) {
             UIButton *close=[UIButton buttonWithType:UIButtonTypeSystem];
             [close setTitle:action.title forState:UIControlStateNormal];
             close.titleLabel.font=[UIFont preferredFontForTextStyle:UIFontTextStyleBody];

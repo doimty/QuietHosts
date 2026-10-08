@@ -180,6 +180,10 @@ static UIScrollView *DialogScroll(UIView *view) {
                 UIViewController *error=self.presenter.presentedViewController;
                 [self check:[error isKindOfClass:QHDialogController.class] && error!=next name:@"invalid URL returns unified error sheet without network"];
                 [self check:![[self.controller valueForKey:@"busy"] boolValue] name:@"invalid input releases actual busy"];
+                QHDialogController *message=(QHDialogController *)error;
+                UIControl *close=DialogControl(message.view,NSLocalizedString(@"OK",nil));
+                [self check:message.topViewController.navigationItem.title.length==0 name:@"one visible card title without duplicate navigation text"];
+                [self check:message.topViewController.navigationItem.leftBarButtonItem==nil && CGRectGetHeight(close.bounds)>=44 name:@"single dismissal action is a reachable full-sized primary button"];
                 [self snapshot:error.view name:@"dialog-real-error.png"];
                 [self click:@"OK" in:error];[self finishControllerFlow:flow];
             });
