@@ -48,6 +48,7 @@ void QHConfigureModal(UIViewController *controller) {
 @property(nonatomic,strong) NSMutableArray<QHDialogAction *> *mutableActions;
 @property(nonatomic,strong) NSMutableArray<UITextField *> *mutableFields;
 @property(nonatomic) BOOL resolving;
+@property(nonatomic) BOOL contentBuilt;
 @end
 @implementation QHDialogController
 + (instancetype)dialogControllerWithTitle:(NSString *)title message:(NSString *)message preferredStyle:(UIAlertControllerStyle)style {
@@ -62,11 +63,11 @@ void QHConfigureModal(UIViewController *controller) {
 - (NSArray<UITextField *> *)textFields { return [self.mutableFields copy]; }
 - (NSArray<QHDialogAction *> *)actions { return [self.mutableActions copy]; }
 - (void)addAction:(QHDialogAction *)action {
-    NSAssert(!self.isViewLoaded,@"Configure dialog actions before presentation");
+    NSAssert(!self.contentBuilt,@"Configure dialog actions before presentation");
     [self.mutableActions addObject:action];
 }
 - (void)addTextFieldWithConfigurationHandler:(void (^)(UITextField *))configuration {
-    NSAssert(!self.isViewLoaded,@"Configure dialog fields before presentation");
+    NSAssert(!self.contentBuilt,@"Configure dialog fields before presentation");
     UITextField *field=[UITextField new];
     field.font=[UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     field.adjustsFontForContentSizeCategory=YES;
@@ -90,8 +91,11 @@ void QHConfigureModal(UIViewController *controller) {
         keepAlive.mutableActions=nil;
     }];
 }
-- (void)viewDidLoad {
-    [super viewDidLoad];
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    if (self.contentBuilt) return;
+    NSAssert(self.content && self.mutableActions && self.mutableFields,@"Dialog factory must configure content before first presentation");
+    self.contentBuilt=YES;
     QHConfigureModal(self);
     if (!self.mutableFields.count && self.detail.length<500) {
         self.sheetPresentationController.detents=@[UISheetPresentationControllerDetent.mediumDetent,UISheetPresentationControllerDetent.largeDetent];

@@ -76,7 +76,8 @@ static UIScrollView *DialogScroll(UIView *view) {
     }
     QHDialogController *dialog=[QHDialogController dialogControllerWithTitle:@"统一弹层 / Modal test"
         message:detail preferredStyle:stage==2 ? UIAlertControllerStyleActionSheet : UIAlertControllerStyleAlert];
-    [self check:!dialog.isViewLoaded name:@"factory configuration precedes view loading"];
+    [dialog loadViewIfNeeded];
+    [self check:dialog.actions.count==0 && dialog.textFields.count==0 name:@"eager navigation view does not build content before configuration"];
     __weak QHDialogController *weakDialog=dialog;
     __weak typeof(self) weak=self;
     if(stage==3) {

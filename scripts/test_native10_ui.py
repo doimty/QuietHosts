@@ -13,7 +13,7 @@ def check(dialog,controller):
     assert 'sheet.preferredCornerRadius=28;' in dialog
     assert 'view.keyboardLayoutGuide.topAnchor' in dialog
     assert 'UISheetPresentationControllerDetent.mediumDetent' in dialog
-    handler=dialog.split('- (void)chooseAction:',1)[1].split('- (void)viewDidLoad',1)[0]
+    handler=dialog.split('- (void)chooseAction:',1)[1].split('- (void)viewWillAppear:',1)[0]
     for required in ('if (self.resolving', 'self.resolving=YES', 'self.view.userInteractionEnabled=NO',
         'QHDialogController *keepAlive=self', 'completion:^{', 'if (action.handler) action.handler(action)', 'keepAlive.mutableActions=nil'):
         assert required in handler, required
@@ -21,7 +21,10 @@ def check(dialog,controller):
     assert 'UIAlertActionStyleCancel' in dialog and 'UIAlertActionStyleDestructive' in dialog
     assert 'DColor(0xb42336,0xff8995)' in dialog
     assert 'DColor(0xffffff,0x13131a)' in dialog
-    assert 'NSAssert(!self.isViewLoaded' in dialog
+    assert 'NSAssert(!self.contentBuilt' in dialog
+    assert '- (void)viewDidLoad' not in dialog
+    assert 'if (self.contentBuilt) return;' in dialog
+    assert 'self.contentBuilt=YES;' in dialog
     assert 'readwrite' not in (ROOT/'App/QHDialogController.h').read_text()
 
 
@@ -50,7 +53,7 @@ def main():
     for name,size in [('Icon1024.png',1024),('Icon60@3x.png',180),('Icon60@2x.png',120)]:check_icon(ROOT/'App/Resources'/name,size)
     assert 'QHDialogController.m' in (ROOT/'App/Makefile').read_text()
     smoke=(ROOT/'Tests/DialogSmoke.m').read_text()
-    for required in ('factory configuration precedes view loading','rapid duplicate click invokes exactly once',
+    for required in ('eager navigation view does not build content before configuration','rapid duplicate click invokes exactly once',
         'weak URL fields survive handler','UIKeyboardDidShowNotification','becomeFirstResponder',
         'software keyboard actually shown','UIContentSizeCategoryAccessibilityExtraExtraExtraLarge',
         'dialog-long-dark.png','new sheet presented after previous dismissed','real controller busy released after cancel/error'):
