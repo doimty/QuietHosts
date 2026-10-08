@@ -132,23 +132,31 @@ UIView *QHVIconTile(NSString *symbol, BOOL large, BOOL danger) {
     ]];
     return tile;
 }
+@interface QHVCapsuleLabel : UILabel
+@end
+@implementation QHVCapsuleLabel
+- (CGRect)textRectForBounds:(CGRect)bounds limitedToNumberOfLines:(NSInteger)lines {
+    UIEdgeInsets insets=UIEdgeInsetsMake(4,10,4,10);
+    CGRect rect=[super textRectForBounds:UIEdgeInsetsInsetRect(bounds,insets) limitedToNumberOfLines:lines];
+    return UIEdgeInsetsInsetRect(rect,UIEdgeInsetsMake(-4,-10,-4,-10));
+}
+- (void)drawTextInRect:(CGRect)rect {
+    [super drawTextInRect:UIEdgeInsetsInsetRect(rect,UIEdgeInsetsMake(4,10,4,10))];
+}
+@end
 UIView *QHVBadge(NSString *text, BOOL positive) {
-    UIStackView *badge = VStack();
-    badge.alignment = UIStackViewAlignmentCenter;
-    badge.layoutMarginsRelativeArrangement = YES;
-    badge.layoutMargins = UIEdgeInsetsMake(4, 10, 4, 10);
-    badge.layer.cornerRadius = 14;
-    badge.backgroundColor = positive ? VGoodBackground() : VInner();
-    UILabel *label = VLabel(text, UIFontTextStyleCaption1, YES);
-    label.textColor = positive ? VGood() : VSecondary();
-    label.textAlignment = NSTextAlignmentCenter;
-    [badge addArrangedSubview:label];
-    // UIStackView itself has no intrinsic content width. Bind its capsule to
-    // the label instead of allowing it to consume the source title's space.
-    [badge.widthAnchor constraintEqualToAnchor:label.widthAnchor constant:20].active = YES;
-    [label setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-    badge.accessibilityIdentifier = @"QHVBadge";
-    [badge setContentHuggingPriority:UILayoutPriorityDefaultHigh forAxis:UILayoutConstraintAxisHorizontal];
+    QHVCapsuleLabel *badge=[QHVCapsuleLabel new];
+    badge.text=text;
+    badge.font=[UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+    badge.adjustsFontForContentSizeCategory=YES;
+    badge.numberOfLines=0;
+    badge.textAlignment=NSTextAlignmentCenter;
+    badge.layer.cornerRadius=14;
+    badge.clipsToBounds=YES;
+    badge.backgroundColor=positive ? VGoodBackground() : VInner();
+    badge.textColor=positive ? VGood() : VSecondary();
+    badge.accessibilityIdentifier=@"QHVBadge";
+    [badge setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     return badge;
 }
 UIView *QHVBrandHeader(NSString *title, NSString *state, BOOL positive, NSString *subtitle) {
