@@ -123,8 +123,14 @@ static UIScrollView *DialogScroll(UIView *view) {
             CGRect keyboard=[dialog.view.window convertRect:self.keyboardFrame fromWindow:nil];
             [self check:CGRectGetMaxY(fieldRect)<=CGRectGetMinY(keyboard)+1 name:@"active input not hidden by keyboard"];
             [self snapshot:dialog.view.window name:@"dialog-url-keyboard.png"];
+            NSString *documents=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
+            [@"keyboard ready" writeToFile:[documents stringByAppendingPathComponent:@"software-keyboard-ready.flag"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             [NSNotificationCenter.defaultCenter removeObserver:self.keyboardObserver];self.keyboardObserver=nil;
-            [self finishStage:dialog stage:stage];
+            // The CI driver captures the complete simulator display. The app's
+            // own UIWindow renderer cannot include the separate keyboard window.
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(3*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+                [self finishStage:dialog stage:stage];
+            });
         });
     }];
 }

@@ -1,6 +1,6 @@
 """Run only on disposable macOS CI. Simulator mock Bridge; no device/helper commands."""
 from pathlib import Path
-import json, os, plistlib, shutil, subprocess, tempfile
+import json, os, plistlib, shutil, subprocess, tempfile, threading
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'build-metadata';OUT.mkdir(exist_ok=True)
 def run(*args):
@@ -27,6 +27,18 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
     if candidates[0]['state']!='Booted':run('xcrun','simctl','boot',identifier)
     run('xcrun','simctl','bootstatus',identifier,'-b')
     run('xcrun','simctl','install',identifier,str(app))
+    container=Path(read('xcrun','simctl','get_app_container',identifier,info['CFBundleIdentifier'],'data').strip())
+    marker=container/'Documents/software-keyboard-ready.flag'
+    if marker.exists():marker.unlink()
+    stop=threading.Event();capture_errors=[]
+    def capture_keyboard():
+        while not stop.wait(.1):
+            if marker.exists():
+                try:
+                    subprocess.run(['xcrun','simctl','io',identifier,'screenshot',str(OUT/'visual-software-keyboard-screen.png')],check=True,timeout=20,capture_output=True)
+                except Exception as error:capture_errors.append(str(error))
+                return
+    capture=threading.Thread(target=capture_keyboard,daemon=True);capture.start()
     try:
         launch=subprocess.run(['xcrun','simctl','launch','--console',identifier,info['CFBundleIdentifier'],'-AppleLanguages','(zh-Hans)','-AppleLocale','zh_CN'],cwd=ROOT,capture_output=True,text=True,timeout=150)
     except subprocess.TimeoutExpired as error:
@@ -35,6 +47,8 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
         (OUT/'visual-smoke-console.txt').write_text(logs)
         print(logs,flush=True)
         raise
+    finally:
+        stop.set();capture.join(timeout=25)
     logs=launch.stdout+'\n'+launch.stderr
     (OUT/'visual-smoke-console.txt').write_text(logs)
     print(logs)
@@ -43,6 +57,7 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
         if file.suffix in ('.json','.png'):shutil.copyfile(file,OUT/('visual-'+file.name))
     report=json.loads((OUT/'visual-result.json').read_text())
     assert launch.returncode==0 and report['failures']==0 and report['writes']==0,report
-    assert report['checks']>100 and report['mock_status_requests']>0,report
+    assert not capture_errors and (OUT/'visual-software-keyboard-screen.png').is_file(), ('Complete keyboard screenshot missing',capture_errors)
+    assert report['checks']>100 and report['dialog_checks']>=90 and report['mock_status_requests']>0,report
     assert 'Unable to simultaneously satisfy constraints' not in logs, 'UIKit constraint conflict'
     print('UIKit simulator smoke PASS:',report)
