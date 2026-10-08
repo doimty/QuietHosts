@@ -66,6 +66,12 @@ NSUInteger RunStatusPresentationTests(void) {
     NSString *ok = QHStatusExplanation(@{@"ok" : @YES, @"state" : @"active"});
     Check(![ok containsString:@"Diagnostic code"]);
     Check([ok containsString:@"not a DNS or traffic protection test"]);
+    NSString *paused = QHStatusExplanation(@{@"ok" : @YES, @"state" : @"inactive"});
+    Check([paused containsString:@"restored its verified original Hosts state"]);
+    Check([paused containsString:@"does not test DNS behavior"]);
+    NSString *unmanaged = QHStatusExplanation(@{@"ok" : @YES, @"state" : @"unmanaged"});
+    Check([unmanaged containsString:@"No QuietHosts rules have been applied"]);
+    Check([unmanaged containsString:@"original system Hosts file has not been written"]);
     NSLog(@"StatusPresentationTests: %lu checks, %lu failures", (unsigned long)checks,
           (unsigned long)failures);
     return failures;

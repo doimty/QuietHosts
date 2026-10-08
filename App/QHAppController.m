@@ -75,6 +75,43 @@ static UIButton *Button(NSString *text, BOOL primary, BOOL enabled, void (^actio
         forControlEvents:UIControlEventTouchUpInside];
     return button;
 }
+static UIButton *ActionRow(NSString *text, NSString *symbol, BOOL enabled, void (^action)(void)) {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    UIButtonConfiguration *config = UIButtonConfiguration.plainButtonConfiguration;
+    config.title = text;
+    config.image = [UIImage systemImageNamed:symbol];
+    config.imagePlacement = NSDirectionalRectEdgeLeading;
+    config.imagePadding = 12;
+    config.contentInsets = NSDirectionalEdgeInsetsMake(8, 4, 8, 4);
+    config.baseForegroundColor = Color(0x202b29, 0xe6ece8);
+    config.imageColorTransformer = ^UIColor *(UIColor *color) {
+        (void)color;
+        return Accent();
+    };
+    config.titleTextAttributesTransformer = ^NSDictionary *(NSDictionary *input) {
+        NSMutableDictionary *attributes = [input mutableCopy];
+        attributes[NSFontAttributeName] = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+        return attributes;
+    };
+    button.configuration = config;
+    button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeading;
+    button.enabled = enabled;
+    button.accessibilityLabel = text;
+    [button.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
+    [button addAction:[UIAction actionWithHandler:^(__kindof UIAction *sender) {
+                (void)sender;
+                if (action) action();
+            }]
+        forControlEvents:UIControlEventTouchUpInside];
+    return button;
+}
+static UIView *ActionSeparator(void) {
+    UIView *line = [UIView new];
+    line.backgroundColor = UIColor.separatorColor;
+    [line.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale].active = YES;
+    line.isAccessibilityElement = NO;
+    return line;
+}
 static NSString *Number(NSUInteger value) {
     return [NSNumberFormatter localizedStringFromNumber:@(value) numberStyle:NSNumberFormatterDecimalStyle];
 }
@@ -333,21 +370,21 @@ static BOOL Animate(void) {
         return QHL(@"Checking file state");
     }
     if ([state isEqual:@"conflict"]) {
-        return QHL(@"File conflict");
+        return QHL(@"Hosts file state is conflicting");
     }
     if (![self.status[@"ok"] boolValue]) {
-        return QHL(@"Helper unavailable");
+        return QHL(@"File state unavailable");
     }
     if ([state isEqual:@"active"]) {
-        return QHL(@"Files applied");
+        return QHL(@"Hosts rules are enabled");
     }
     if ([state isEqual:@"inactive"]) {
-        return QHL(@"Baseline restored");
+        return QHL(@"Hosts rules are paused");
     }
     if ([state isEqual:@"unmanaged"]) {
-        return QHL(@"Not yet applied");
+        return QHL(@"Hosts rules are not applied");
     }
-    return QHL(@"State unavailable");
+    return QHL(@"File state unavailable");
 }
 - (NSString *)statusExplanation:(NSDictionary *)status {
     return QHStatusExplanation(status);
@@ -361,80 +398,106 @@ static BOOL Animate(void) {
     }
     __weak typeof(self) weak = self;
     UIStackView *home = self.pages[0].stack;
-    [home addArrangedSubview:Label(QHL(@"Local rules. Clear control."), UIFontTextStyleSubheadline, YES)];
+    [home addArrangedSubview:Label(QHL(@"Local Hosts rules, in your control."), UIFontTextStyleSubheadline, YES)];
     UIStackView *hero = Card();
-    UIImageView *symbol =
-        [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"shield.lefthalf.filled"]];
-    symbol.tintColor = Accent();
+    UIStackView *statusRow = [UIStackView new];
+    statusRow.axis = UILayoutConstraintAxisHorizontal;
+    statusRow.alignment = UIStackViewAlignmentCenter;
+    statusRow.spacing = 10;
+    UIImageView *symbol = [UIImageView new];
+    BOOL managedActive = [self.status[@"state"] isEqual:@"active"];
+    symbol.image = [UIImage systemImageNamed:managedActive ? @"shield.lefthalf.filled" : @"shield"];
+    symbol.tintColor = managedActive ? Accent() : UIColor.secondaryLabelColor;
     symbol.contentMode = UIViewContentModeScaleAspectFit;
-    [symbol.heightAnchor constraintEqualToConstant:36].active = YES;
+    [symbol.widthAnchor constraintEqualToConstant:26].active = YES;
+    [symbol.heightAnchor constraintEqualToConstant:30].active = YES;
     symbol.isAccessibilityElement = NO;
-    [hero addArrangedSubview:symbol];
-    [hero addArrangedSubview:Label(self.stateTitle, UIFontTextStyleTitle1, NO)];
+    [statusRow addArrangedSubview:symbol];
+    [statusRow addArrangedSubview:Label(self.stateTitle, UIFontTextStyleTitle2, NO)];
+    [hero addArrangedSubview:statusRow];
     [hero addArrangedSubview:Label([self statusExplanation:self.status], UIFontTextStyleFootnote, YES)];
     if ([self.status[@"ok"] boolValue] && [self.status[@"domainCount"] isKindOfClass:NSNumber.class]) {
-        [hero addArrangedSubview:Label([NSString stringWithFormat:QHL(@"Managed snapshot: %@ domains"),
-                                                                  Number([self.status[@"domainCount"]
-                                                                      unsignedIntegerValue])],
-                                       UIFontTextStyleSubheadline, NO)];
+        NSUInteger count = [self.status[@"domainCount"] unsignedIntegerValue];
+        if ([self.status[@"state"] isEqual:@"active"]) {
+            [hero addArrangedSubview:Label([NSString stringWithFormat:QHL(@"Rules in managed Hosts: %@ domains"),
+                                              Number(count)], UIFontTextStyleSubheadline, NO)];
+        } else if ([self.status[@"state"] isEqual:@"inactive"] && count > 0) {
+            [hero addArrangedSubview:Label([NSString stringWithFormat:QHL(@"Saved rule set: %@ domains"),
+                                              Number(count)], UIFontTextStyleSubheadline, NO)];
+        }
     }
     [home addArrangedSubview:hero];
     if (self.storeError) {
         UIStackView *failure = Card();
         [failure addArrangedSubview:Label(QHL(@"Local draft unavailable"), UIFontTextStyleHeadline, NO)];
-        [failure
-            addArrangedSubview:Label(self.storeError.localizedDescription, UIFontTextStyleFootnote, YES)];
-        [failure addArrangedSubview:Button(QHL(@"Read local storage again"), NO, !self.busy, ^{
-                     [weak start];
-                 })];
+        [failure addArrangedSubview:Label(self.storeError.localizedDescription, UIFontTextStyleFootnote, YES)];
+        [failure addArrangedSubview:ActionRow(QHL(@"Read local storage again"), @"arrow.clockwise", !self.busy, ^{
+            [weak start];
+        })];
         [home addArrangedSubview:failure];
     } else if (self.draft) {
-        UIStackView *counts = Card();
-        [counts addArrangedSubview:Label(Number(self.draft.compiled.domains.count), UIFontTextStyleLargeTitle,
-                                         NO)];
-        [counts
-            addArrangedSubview:Label(QHL(@"Merged domains in local draft"), UIFontTextStyleSubheadline, YES)];
-        [counts addArrangedSubview:Label([NSString
-                                             stringWithFormat:QHL(@"%@ sources · %@ exact exceptions"),
-                                                              Number([self.draft.document[@"sources"] count]),
-                                                              Number(self.draft.allowlistCount)],
-                                         UIFontTextStyleSubheadline, NO)];
-        BOOL matched = [self.appliedLocalRevision isEqual:self.draft.document[@"revision"]] &&
-                       [self.appliedHelperRevision isEqual:self.status[@"revision"]];
-        [counts addArrangedSubview:Label(matched ? QHL(@"This draft was saved to the helper in this session.")
-                                                 : QHL(@"Local draft · awaiting explicit Apply"),
-                                         UIFontTextStyleFootnote, YES)];
-        [home addArrangedSubview:counts];
+        UIStackView *draftCard = Card();
+        [draftCard addArrangedSubview:Label(QHL(@"Draft"), UIFontTextStyleHeadline, NO)];
+        UIStackView *metric = [UIStackView new];
+        metric.axis = UILayoutConstraintAxisHorizontal;
+        metric.alignment = UIStackViewAlignmentFirstBaseline;
+        metric.spacing = 8;
+        [metric addArrangedSubview:Label(Number(self.draft.compiled.domains.count), UIFontTextStyleTitle1, NO)];
+        [metric addArrangedSubview:Label(QHL(@"unique domains"), UIFontTextStyleSubheadline, YES)];
+        [draftCard addArrangedSubview:metric];
+        [draftCard addArrangedSubview:Label([NSString stringWithFormat:QHL(@"%@ sources · %@ exact allowlist entries"),
+                                               Number([self.draft.document[@"sources"] count]),
+                                               Number(self.draft.allowlistCount)],
+                                           UIFontTextStyleFootnote, YES)];
+        [draftCard addArrangedSubview:Label(QHL(@"Draft is stored on this device. Apply it to update managed Hosts."),
+                                           UIFontTextStyleFootnote, YES)];
+        [home addArrangedSubview:draftCard];
     }
-    [home addArrangedSubview:Button(QHL(@"Apply local draft"), YES, !self.busy && self.draft != nil, ^{
-              [weak prepareApply];
-          })];
-    [home addArrangedSubview:Button(QHL(@"Update URL sources"), NO, !self.busy && self.draft != nil, ^{
-              [weak refreshSources];
-          })];
-    if (self.download) {
-        [home addArrangedSubview:Button(QHL(@"Cancel download"), NO, YES, ^{
-                  [weak.download cancel];
-              })];
-    }
-    if ([self statusWritable:self.status]) {
-        if ([self.status[@"state"] isEqual:@"active"]) {
-            [home addArrangedSubview:Button(QHL(@"Pause and restore baseline"), NO, !self.busy, ^{
-                      [weak prepareHelperCommand:@"disable"];
-                  })];
-        } else if ([self.status[@"state"] isEqual:@"inactive"]) {
-            [home addArrangedSubview:Button(QHL(@"Enable saved helper snapshot"), NO, !self.busy, ^{
-                      [weak prepareHelperCommand:@"enable"];
-                  })];
+    [home addArrangedSubview:Button(QHL(@"Apply draft"), YES, !self.busy && self.draft != nil, ^{
+        [weak prepareApply];
+    })];
+
+    UIStackView *actions = Card();
+    [actions addArrangedSubview:Label(QHL(@"Actions"), UIFontTextStyleHeadline, NO)];
+    NSArray *sourceItems = [self.draft.document[@"sources"] isKindOfClass:NSArray.class]
+                                ? self.draft.document[@"sources"] : @[];
+    BOOL hasURLSources = NO;
+    for (NSDictionary *source in sourceItems) {
+        if ([source[@"kind"] isEqual:@"url"] && [source[@"enabled"] boolValue]) {
+            hasURLSources = YES;
+            break;
         }
     }
-    [home addArrangedSubview:Button(QHL(@"Check file state"), NO, !self.busy, ^{
-              [weak refreshStatus];
-          })];
-    [home addArrangedSubview:
-              Label(self.busy ? QHL(@"Working…")
-                              : QHL(@"Manual updates only. No background polling or per-domain DNS queries."),
-                    UIFontTextStyleFootnote, YES)];
+    BOOL hasAction = NO;
+#define QH_ADD_ACTION_ROW(title, icon, enabled, body) \\
+    do { \\
+        if (hasAction) [actions addArrangedSubview:ActionSeparator()]; \\
+        [actions addArrangedSubview:ActionRow((title), (icon), (enabled), (body))]; \\
+        hasAction = YES; \\
+    } while (0)
+    QH_ADD_ACTION_ROW(QHL(@"Manage rule sources"), @"list.bullet", YES, ^{
+        weak.rootController.selectedIndex = 1;
+    });
+    if (self.download) {
+        QH_ADD_ACTION_ROW(QHL(@"Cancel download"), @"xmark.circle", YES, ^{ [weak.download cancel]; });
+    } else if (hasURLSources) {
+        QH_ADD_ACTION_ROW(QHL(@"Update online sources"), @"arrow.clockwise", !self.busy, ^{ [weak refreshSources]; });
+    }
+    if ([self statusWritable:self.status] && [self.status[@"state"] isEqual:@"active"]) {
+        QH_ADD_ACTION_ROW(QHL(@"Pause rules and restore original Hosts"), @"pause.circle", !self.busy, ^{
+            [weak prepareHelperCommand:@"disable"];
+        });
+    } else if ([self statusWritable:self.status] && [self.status[@"state"] isEqual:@"inactive"]) {
+        QH_ADD_ACTION_ROW(QHL(@"Resume saved rules"), @"play.circle", !self.busy, ^{
+            [weak prepareHelperCommand:@"enable"];
+        });
+    }
+    QH_ADD_ACTION_ROW(QHL(@"Refresh file status"), @"arrow.triangle.2.circlepath", !self.busy, ^{ [weak refreshStatus]; });
+#undef QH_ADD_ACTION_ROW
+    [home addArrangedSubview:actions];
+    [home addArrangedSubview:Label(self.busy ? QHL(@"Working…")
+                                               : QHL(@"Online sources update only when requested. Reimport files or pasted text to refresh them."),
+                                      UIFontTextStyleFootnote, YES)];
     [self renderRules];
     [self renderSettings];
 }
@@ -757,8 +820,7 @@ static BOOL Animate(void) {
             }
             [weak finishBusy];
             [weak message:saved ? QHL(@"Saved locally · not applied") : QHL(@"Nothing saved")
-                   detail:saved ? QHL(@"Your source snapshots are saved. Use Apply local draft on Home when "
-                                      @"you are ready to update managed Hosts.")
+                   detail:saved ? QHL(@"Draft saved. Managed Hosts were not changed. Return to Home and choose Apply draft to install these rules.")
                                 : error.localizedDescription];
         });
     });
@@ -1150,7 +1212,7 @@ static BOOL Animate(void) {
             BOOL adoption = QHStatusRequiresAdoption(status);
             [weak
                 showPreview:draft
-                      title:adoption ? QHL(@"Back up and adopt basic Hosts") : QHL(@"Apply local draft")
+                      title:adoption ? QHL(@"Back up and adopt basic Hosts") : QHL(@"Apply draft")
                      detail:
                          adoption
                              ? QHL(@"You are authorizing QuietHosts to take over the existing basic Hosts "
@@ -1159,11 +1221,9 @@ static BOOL Animate(void) {
                                    @"file or directory mapping changes after this preview, the operation is "
                                    @"refused. No directory ownership or links will be repaired "
                                    @"automatically.")
-                             : QHL(@"The helper will validate and atomically apply this generated blocklist. "
-                                   @"Existing baseline mappings are never silently overridden. A concurrent "
-                                   @"helper "
-                                   @"change rejects this preview. Applying files does not prove DNS "
-                                   @"filtering.")
+                             : QHL(@"This will validate and update the managed Hosts file. The original system "
+                                   @"Hosts file is not written through. Success confirms file state only; "
+                                   @"DNS blocking is not tested.")
                      button:adoption ? QHL(@"Confirm backup and Apply") : QHL(@"Confirm Apply")
                     confirm:^{
                         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -1213,13 +1273,13 @@ static BOOL Animate(void) {
                NSString *revision = [status[@"revision"] copy];
                UIAlertController *alert = [UIAlertController
                    alertControllerWithTitle:disabling ? QHL(@"Restore verified baseline?")
-                                                      : QHL(@"Enable saved helper snapshot?")
+                                                      : QHL(@"Resume saved rules?")
                                     message:disabling
                                                 ? QHL(@"The helper restores only its trusted baseline. Local "
                                                       @"sources are kept. Conflicting files cause refusal, "
                                                       @"not deletion.")
-                                                : QHL(@"This enables the helper's stored snapshot, not the "
-                                                      @"local draft. Use Apply to install draft changes.")
+                                                : QHL(@"The saved managed rules will be enabled. This does "
+                                                    @"not apply changes in the local draft.")
                              preferredStyle:UIAlertControllerStyleAlert];
                [alert addAction:[UIAlertAction actionWithTitle:QHL(@"Cancel")
                                                          style:UIAlertActionStyleCancel

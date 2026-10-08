@@ -1,8 +1,8 @@
 # 静域 / QuietHosts
 
-Native UIKit Hosts source manager for iOS 15+ RootHide. Candidate `0.1.0-1+native5`; installation and device behavior still require separate acceptance.
+Native UIKit Hosts source manager for iOS 15+ RootHide. Candidate `0.1.0-1+native6`; device installation and visual acceptance remain pending.
 
-Native5 candidate adds Quantumult X exact `HOST` rows alongside exact `DOMAIN` inputs, while keeping suffix, keyword, IP and URL matchers unsupported. It adds the `iPhoneOS` platform declaration to the Control Center bundle and enforces its metadata in package validation. The UI uses tighter page/card/button spacing and a native-tinted `UISegmentedControl` for appearance; it does not draw a custom toggle. See `docs/NATIVE5.md` for scope, evidence and validation boundaries.
+Native6 tightens the Home hierarchy: verified Hosts state, local draft summary, one primary Apply button, then grouped secondary actions. Copy distinguishes the app's local draft from the managed Hosts file and avoids implying DNS protection. See `docs/NATIVE6.md` and the UI mock preview. Native5's exact Quantumult X `HOST` support and Control Center platform metadata are retained.
 
 Native2 adapts the verified split-root layout: primary root and paired routing var may be UID501, protected etc/private/paired-root/lib/state must retain the expected root ownership. Paired paths and backlink are independently derived and checked, not arbitrary symlink targets. Only a regular file containing the three conventional localhost/broadcasthost mappings becomes eligible for **explicit backup-and-adopt confirmation**; its exact original bytes, owner/group and mode are restored on Disable. Other regular files remain conflicts. Error codes are shown on Home, error dialogs and Advanced information.
 

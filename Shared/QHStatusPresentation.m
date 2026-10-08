@@ -36,8 +36,20 @@ NSString *QHStatusExplanation(id value) {
     id ok = status[@"ok"];
     if ([ok isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)ok) == CFBooleanGetTypeID() &&
         [ok boolValue]) {
-        return QHL(@"This is verified file state, not a DNS or traffic protection test. Apps may retain "
-                   @"cached DNS results.");
+        NSString *state = status[@"state"];
+        if ([state isEqual:@"active"]) {
+            return QHL(@"This is verified file state, not a DNS or traffic protection test. Apps may retain "
+                       @"cached DNS results.");
+        }
+        if ([state isEqual:@"inactive"]) {
+            return QHL(@"QuietHosts rules are paused. The helper restored its verified original Hosts state; "
+                       @"this does not test DNS behavior.");
+        }
+        if ([state isEqual:@"unmanaged"]) {
+            return QHL(@"No QuietHosts rules have been applied. The original system Hosts file has not been "
+                       @"written.");
+        }
+        return QHL(@"The helper returned a file status, but it does not verify DNS or traffic protection.");
     }
     NSString *code = QHStatusErrorCode(status);
     NSString *detail;
