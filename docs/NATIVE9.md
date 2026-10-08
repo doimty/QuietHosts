@@ -22,4 +22,10 @@ Helper没有托管文件字节数和真实应用白名单字段：不能把本�
 - deb数字root、helper04755、arm64e iOS15、签名代码页、entitlements、无CC/额外注入、版本元数据一致；artifact SHA单独核对。
 - 旧布局的源码必须被新结构门禁拒绝；CI失败不交付。独立审查无交付不能称通过。
 
+## 大字号 smoke 失败复核
+
+Run37808308088 已执行真实 UIKit，但两项 accessibility stats single column 失败。原夹具 parent/child 未挂窗口，且只检查请求的category，未验证组件实际收到的trait；目前这是待验证的夹具缺口，不先宣称生产布局无误。
+
+先仅修夹具：挂独立UIWindow、等待UIKit布局周期，分别检查实际trait、窗口归属、几何、辅助大字单列及正常宽度双列；保留原断言，生产组件不改。若实际trait正确而axis仍错，再修生产重排。云端通过后另验证在线字号切换与真实页面截图。所有测试Bridge仍mock，writes必须0。
+
 实际明暗、大字、小屏、VoiceOver/长标题与操作触摸，需要本版真机验收；HTML图片不是原生截图。构建/审包结果另记交付收据，不预写成功。

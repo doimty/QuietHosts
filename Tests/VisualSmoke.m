@@ -82,7 +82,10 @@ static NSUInteger CountClass(UIView *view, Class type) {
 - (void)runFixtures {
     NSArray *categories=@[UIContentSizeCategoryLarge,UIContentSizeCategoryExtraExtraExtraLarge,UIContentSizeCategoryAccessibilityExtraExtraExtraLarge];
     for (NSNumber *width in @[@320,@375,@428]) for (NSString *category in categories) {
+        UIWindow *fixtureWindow=[[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
         UIViewController *parent=[UIViewController new], *child=[UIViewController new];
+        fixtureWindow.rootViewController=parent;
+        [fixtureWindow makeKeyAndVisible];
         [parent addChildViewController:child];
         [parent.view addSubview:child.view];
         [child didMoveToParentViewController:parent];
@@ -104,14 +107,30 @@ static NSUInteger CountClass(UIView *view, Class type) {
         UIControl *row=QHVRow(@"Very long source name / 超长来源名称",@"Detailed source summary that wraps",@"doc",@"300,000",NO,YES, ^{});
         [stack addArrangedSubview:row];
         [stack addArrangedSubview:QHVFormRow(@"合并后唯一域名 / merged domains",@"300,000")];
-        [child.view setNeedsLayout];[child.view layoutIfNeeded];[child.view layoutIfNeeded];
+        [child.view setNeedsLayout];
+        for (NSUInteger pass=0;pass<3;pass++) {
+            [fixtureWindow layoutIfNeeded];
+            [child.view layoutIfNeeded];
+            [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:.01]];
+        }
+        UIStackView *stats=(UIStackView *)stack.arrangedSubviews[2];
+        NSLog(@"QH_TRAIT width=%@ requested=%@ child=%@ stats=%@ axis=%ld frame=%@ window=%d",width,category,
+            child.view.traitCollection.preferredContentSizeCategory,stats.traitCollection.preferredContentSizeCategory,
+            (long)stats.axis,NSStringFromCGRect(stats.frame),stats.window!=nil);
+        Check(stats.window==fixtureWindow,@"fixture attached to real window");
+        Check([stats.traitCollection.preferredContentSizeCategory isEqual:category],@"requested category reached actual stats");
         Geometry(stack);
         Check(row.isAccessibilityElement && (row.accessibilityTraits & UIAccessibilityTraitButton),@"row accessibility");
         Check(CGRectGetHeight(row.bounds)>=44,@"44pt row target");
         if (UIContentSizeCategoryIsAccessibilityCategory(category)) {
-            UIStackView *stats=(UIStackView *)stack.arrangedSubviews[2];
             Check(stats.axis==UILayoutConstraintAxisVertical,@"accessibility stats single column");
         }
+        if ([category isEqual:UIContentSizeCategoryLarge] && width.doubleValue>=375) {
+            Check(stats.axis==UILayoutConstraintAxisHorizontal,@"normal stats two columns");
+        }
+        fixtureWindow.hidden=YES;
+        fixtureWindow.rootViewController=nil;
+        [self.window makeKeyAndVisible];
     }
     // Exercise actual controller states, not only a copied state model.
     NSDictionary *savedStatus=[self.controller valueForKey:@"status"];
