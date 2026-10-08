@@ -27,7 +27,14 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
     if candidates[0]['state']!='Booted':run('xcrun','simctl','boot',identifier)
     run('xcrun','simctl','bootstatus',identifier,'-b')
     run('xcrun','simctl','install',identifier,str(app))
-    launch=subprocess.run(['xcrun','simctl','launch','--console',identifier,info['CFBundleIdentifier'],'-AppleLanguages','(zh-Hans)','-AppleLocale','zh_CN'],cwd=ROOT,capture_output=True,text=True,timeout=150)
+    try:
+        launch=subprocess.run(['xcrun','simctl','launch','--console',identifier,info['CFBundleIdentifier'],'-AppleLanguages','(zh-Hans)','-AppleLocale','zh_CN'],cwd=ROOT,capture_output=True,text=True,timeout=150)
+    except subprocess.TimeoutExpired as error:
+        def text(value):return value.decode(errors='replace') if isinstance(value,bytes) else (value or '')
+        logs=text(error.stdout)+'\n'+text(error.stderr)
+        (OUT/'visual-smoke-console.txt').write_text(logs)
+        print(logs,flush=True)
+        raise
     logs=launch.stdout+'\n'+launch.stderr
     (OUT/'visual-smoke-console.txt').write_text(logs)
     print(logs)
