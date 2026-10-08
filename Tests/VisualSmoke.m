@@ -81,8 +81,10 @@ static NSUInteger CountClass(UIView *view, Class type) {
 }
 - (void)runFixtures {
     NSArray *categories=@[UIContentSizeCategoryLarge,UIContentSizeCategoryExtraExtraExtraLarge,UIContentSizeCategoryAccessibilityExtraExtraExtraLarge];
+    for (NSNumber *style in @[@(UIUserInterfaceStyleLight),@(UIUserInterfaceStyleDark)])
     for (NSNumber *width in @[@320,@375,@428]) for (NSString *category in categories) {
         UIWindow *fixtureWindow=[[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+        fixtureWindow.overrideUserInterfaceStyle=(UIUserInterfaceStyle)style.integerValue;
         UIViewController *parent=[UIViewController new], *child=[UIViewController new];
         fixtureWindow.rootViewController=parent;
         [fixtureWindow makeKeyAndVisible];
@@ -127,6 +129,30 @@ static NSUInteger CountClass(UIView *view, Class type) {
         }
         if ([category isEqual:UIContentSizeCategoryLarge] && width.doubleValue>=375) {
             Check(stats.axis==UILayoutConstraintAxisHorizontal,@"normal stats two columns");
+        }
+        Check(stats.traitCollection.userInterfaceStyle==(UIUserInterfaceStyle)style.integerValue,@"requested appearance reached actual stats");
+        if (@available(iOS 17.0, *)) {
+            // Reuse the existing views. No manual component updateFlow call,
+            // no fabricated category notification and no recreation of labels.
+            CGFloat normalFont=0;
+            for (NSString *next in @[UIContentSizeCategoryLarge,UIContentSizeCategoryAccessibilityExtraExtraExtraLarge,UIContentSizeCategoryLarge]) {
+                child.traitOverrides.preferredContentSizeCategory=next;
+                for (NSUInteger pass=0;pass<3;pass++) {
+                    [fixtureWindow layoutIfNeeded];
+                    [child.view layoutIfNeeded];
+                    [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:.01]];
+                }
+                Check([stats.traitCollection.preferredContentSizeCategory isEqual:next],@"live category reaches existing stats");
+                BOOL single=UIContentSizeCategoryIsAccessibilityCategory(next) || width.doubleValue<364;
+                Check(stats.axis==(single ? UILayoutConstraintAxisVertical : UILayoutConstraintAxisHorizontal),@"live stats axis follows category and width");
+                UIStackView *panel=(UIStackView *)stats.arrangedSubviews[0];
+                UILabel *number=(UILabel *)panel.arrangedSubviews[0];
+                if ([next isEqual:UIContentSizeCategoryLarge]) {
+                    if (normalFont>0) Check(fabs(number.font.pointSize-normalFont)<.1,@"normal font restored");
+                    normalFont=number.font.pointSize;
+                } else Check(number.font.pointSize>normalFont,@"existing statistic font actually scales");
+                Geometry(stack);
+            }
         }
         fixtureWindow.hidden=YES;
         fixtureWindow.rootViewController=nil;
