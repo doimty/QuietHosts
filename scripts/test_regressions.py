@@ -4,6 +4,7 @@ import os,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 def run(args):subprocess.run(args,cwd=root,check=True)
 run(['python3', 'scripts/test_ui_palette.py'])
+run(['python3', 'scripts/test_native10_ui.py'])
 with tempfile.TemporaryDirectory(prefix='qh-regressions-') as folder:
  d=Path(folder)
  flags=['clang','-std=c11','-D_DEFAULT_SOURCE','-D_DARWIN_C_SOURCE','-Wall','-Wextra','-Werror','-pedantic']

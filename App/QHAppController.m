@@ -1,5 +1,6 @@
 #import "QHAppController.h"
 #import "QHVisualComponents.h"
+#import "QHDialogController.h"
 #import "QHStore.h"
 #import "QHDownload.h"
 #include "QHImportLifecycle.h"
@@ -273,10 +274,10 @@ static BOOL Animate(void) {
     return self.rootController.presentedViewController ?: self.rootController;
 }
 - (void)message:(NSString *)title detail:(NSString *)detail {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+    QHDialogController *alert = [QHDialogController dialogControllerWithTitle:title
                                                                    message:detail
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:QHL(@"OK") style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[QHDialogAction actionWithTitle:QHL(@"OK") style:UIAlertActionStyleCancel handler:nil]];
     [self.presenter presentViewController:alert animated:Animate() completion:nil];
 }
 - (void)finishBusy {
@@ -577,22 +578,22 @@ static BOOL Animate(void) {
     return [theme isEqual:@"light"] ? QHL(@"Light") : [theme isEqual:@"dark"] ? QHL(@"Dark") : QHL(@"System");
 }
 - (void)showThemePicker {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:QHL(@"Theme") message:nil
+    QHDialogController *alert = [QHDialogController dialogControllerWithTitle:QHL(@"Theme") message:nil
         preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray *keys = @[ @"system", @"light", @"dark" ];
     NSArray *titles = @[ QHL(@"System"), QHL(@"Light"), QHL(@"Dark") ];
     __weak typeof(self) weak = self;
     for (NSUInteger index = 0; index < keys.count; index++) {
         NSString *key = keys[index];
-        [alert addAction:[UIAlertAction actionWithTitle:titles[index] style:UIAlertActionStyleDefault
-            handler:^(UIAlertAction *action) {
+        [alert addAction:[QHDialogAction actionWithTitle:titles[index] style:UIAlertActionStyleDefault
+            handler:^(QHDialogAction *action) {
                 (void)action;
                 [NSUserDefaults.standardUserDefaults setObject:key forKey:@"QHTheme"];
                 [weak applyThemeToWindow:weak.rootController.view.window];
                 [weak render];
             }]];
     }
-    [alert addAction:[UIAlertAction actionWithTitle:QHL(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[QHDialogAction actionWithTitle:QHL(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
     alert.popoverPresentationController.sourceView = self.pages[2].view;
     alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.pages[2].view.bounds),
         CGRectGetMidY(self.pages[2].view.bounds), 1, 1);
@@ -657,17 +658,17 @@ static BOOL Animate(void) {
     }
     NSString *revision = [self.status[@"revision"] copy];
     __weak typeof(self) weak = self;
-    UIAlertController *alert = [UIAlertController
-        alertControllerWithTitle:QHL(@"Retry DNS reload")
+    QHDialogController *alert = [QHDialogController
+        dialogControllerWithTitle:QHL(@"Retry DNS reload")
                          message:QHL(@"This requests a restart of the two DNS services. Connections may "
                                      @"briefly be interrupted; Hosts files are not changed.")
                   preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:QHL(@"Cancel")
+    [alert addAction:[QHDialogAction actionWithTitle:QHL(@"Cancel")
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:QHL(@"Confirm")
+    [alert addAction:[QHDialogAction actionWithTitle:QHL(@"Confirm")
                                               style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *a) {
+                                            handler:^(QHDialogAction *a) {
                                                 (void)a;
                                                 weak.busy = YES;
                                                 [weak render];
@@ -701,20 +702,20 @@ static BOOL Animate(void) {
                 detail];
         detail = [[self statusExplanation:self.status] stringByAppendingFormat:@"\n\n%@", detail];
     }
-    UIAlertController *alert = [UIAlertController
-        alertControllerWithTitle:advanced ? QHL(@"Advanced information") : QHL(@"Backup and restore")
+    QHDialogController *alert = [QHDialogController
+        dialogControllerWithTitle:advanced ? QHL(@"Advanced information") : QHL(@"Backup and restore")
                          message:detail
                   preferredStyle:UIAlertControllerStyleAlert];
     if ([self statusWritable:self.status] && [self.status[@"state"] isEqual:@"active"]) {
         __weak typeof(self) weak = self;
-        [alert addAction:[UIAlertAction actionWithTitle:QHL(@"Restore verified baseline")
+        [alert addAction:[QHDialogAction actionWithTitle:QHL(@"Restore verified baseline")
                                                   style:UIAlertActionStyleDestructive
-                                                handler:^(UIAlertAction *a) {
+                                                handler:^(QHDialogAction *a) {
                                                     (void)a;
                                                     [weak prepareHelperCommand:@"disable"];
                                                 }]];
     }
-    [alert addAction:[UIAlertAction actionWithTitle:QHL(@"Close")
+    [alert addAction:[QHDialogAction actionWithTitle:QHL(@"Close")
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     [self.presenter presentViewController:alert animated:Animate() completion:nil];
@@ -728,7 +729,7 @@ static BOOL Animate(void) {
     page.title = title;
     [page loadViewIfNeeded];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:page];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    QHConfigureModal(nav);
     nav.modalInPresentation = YES;
     __weak typeof(self) weak = self;
     __weak UINavigationController *weakNav = nav;
@@ -912,36 +913,36 @@ static BOOL Animate(void) {
     self.busy = YES;
     [self render];
     __weak typeof(self) weak = self;
-    UIAlertController *alert = [UIAlertController
-        alertControllerWithTitle:allowlist ? QHL(@"Exact allowlist") : QHL(@"Add source")
+    QHDialogController *alert = [QHDialogController
+        dialogControllerWithTitle:allowlist ? QHL(@"Exact allowlist") : QHL(@"Add source")
                          message:allowlist
                                      ? QHL(@"Replace the entire allowlist. Every nonempty line must be an "
                                            @"exact domain; any invalid entry rejects the whole change.")
                                      : QHL(@"Hosts, bare domains, exact DOMAIN and HOST rules are supported. Preview before saving. Suffix, keyword, IP-range and URL rules cannot be expressed by Hosts and are skipped. Large lists should be imported as files.")
                   preferredStyle:UIAlertControllerStyleActionSheet];
     if (!allowlist) {
-        [alert addAction:[UIAlertAction actionWithTitle:QHL(@"HTTPS URL")
+        [alert addAction:[QHDialogAction actionWithTitle:QHL(@"HTTPS URL")
                                                   style:UIAlertActionStyleDefault
-                                                handler:^(UIAlertAction *a) {
+                                                handler:^(QHDialogAction *a) {
                                                     (void)a;
                                                     [weak askURL];
                                                 }]];
     }
-    [alert addAction:[UIAlertAction actionWithTitle:QHL(@"Choose file")
+    [alert addAction:[QHDialogAction actionWithTitle:QHL(@"Choose file")
                                               style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *a) {
+                                            handler:^(QHDialogAction *a) {
                                                 (void)a;
                                                 [weak chooseFile:allowlist];
                                             }]];
-    [alert addAction:[UIAlertAction actionWithTitle:allowlist ? QHL(@"Edit text") : QHL(@"Paste text")
+    [alert addAction:[QHDialogAction actionWithTitle:allowlist ? QHL(@"Edit text") : QHL(@"Paste text")
                                               style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *a) {
+                                            handler:^(QHDialogAction *a) {
                                                 (void)a;
                                                 [weak editText:allowlist];
                                             }]];
-    [alert addAction:[UIAlertAction actionWithTitle:QHL(@"Cancel")
+    [alert addAction:[QHDialogAction actionWithTitle:QHL(@"Cancel")
                                               style:UIAlertActionStyleCancel
-                                            handler:^(UIAlertAction *a) {
+                                            handler:^(QHDialogAction *a) {
                                                 (void)a;
                                                 [weak finishBusy];
                                             }]];
@@ -951,8 +952,8 @@ static BOOL Animate(void) {
     [self.rootController presentViewController:alert animated:Animate() completion:nil];
 }
 - (void)askURL {
-    UIAlertController *alert = [UIAlertController
-        alertControllerWithTitle:QHL(@"HTTPS source")
+    QHDialogController *alert = [QHDialogController
+        dialogControllerWithTitle:QHL(@"HTTPS source")
                          message:
                              QHL(@"Use a direct raw file URL without credentials. The full URL, including "
                                  @"any query, is stored only in this app's private source document for "
@@ -972,17 +973,17 @@ static BOOL Animate(void) {
         field.textContentType = @"";
     }];
     __weak typeof(self) weak = self;
-    __weak UIAlertController *weakAlert = alert;
-    [alert addAction:[UIAlertAction actionWithTitle:QHL(@"Cancel")
+    __weak QHDialogController *weakAlert = alert;
+    [alert addAction:[QHDialogAction actionWithTitle:QHL(@"Cancel")
                                               style:UIAlertActionStyleCancel
-                                            handler:^(UIAlertAction *a) {
+                                            handler:^(QHDialogAction *a) {
                                                 (void)a;
                                                 [weak finishBusy];
                                             }]];
-    [alert addAction:[UIAlertAction
+    [alert addAction:[QHDialogAction
                          actionWithTitle:QHL(@"Download and preview")
                                    style:UIAlertActionStyleDefault
-                                 handler:^(UIAlertAction *a) {
+                                 handler:^(QHDialogAction *a) {
                                      (void)a;
                                      NSString *name = weakAlert.textFields[0].text;
                                      NSString *text = weakAlert.textFields[1].text;
@@ -1116,6 +1117,7 @@ static BOOL Animate(void) {
                   : QHL(@"Paste Hosts blocking records or bare domains. The editor is limited to 64 K "
                         @"characters; import files up to 16 MiB for larger lists.");
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:editor];
+    QHConfigureModal(nav);
     nav.modalInPresentation = YES;
     __weak typeof(self) weak = self;
     __weak UINavigationController *weakNav = nav;
@@ -1288,8 +1290,8 @@ static BOOL Animate(void) {
                    return;
                }
                NSString *revision = [status[@"revision"] copy];
-               UIAlertController *alert = [UIAlertController
-                   alertControllerWithTitle:disabling ? QHL(@"Restore verified baseline?")
+               QHDialogController *alert = [QHDialogController
+                   dialogControllerWithTitle:disabling ? QHL(@"Restore verified baseline?")
                                                       : QHL(@"Resume saved rules?")
                                     message:disabling
                                                 ? QHL(@"The helper restores only its trusted baseline. Local "
@@ -1298,16 +1300,16 @@ static BOOL Animate(void) {
                                                 : QHL(@"The saved managed rules will be enabled. This does "
                                                     @"not apply changes in the local draft.")
                              preferredStyle:UIAlertControllerStyleAlert];
-               [alert addAction:[UIAlertAction actionWithTitle:QHL(@"Cancel")
+               [alert addAction:[QHDialogAction actionWithTitle:QHL(@"Cancel")
                                                          style:UIAlertActionStyleCancel
-                                                       handler:^(UIAlertAction *a) {
+                                                       handler:^(QHDialogAction *a) {
                                                            (void)a;
                                                            [weak finishBusy];
                                                        }]];
-               [alert addAction:[UIAlertAction actionWithTitle:QHL(@"Confirm")
+               [alert addAction:[QHDialogAction actionWithTitle:QHL(@"Confirm")
                                                          style:disabling ? UIAlertActionStyleDestructive
                                                                          : UIAlertActionStyleDefault
-                                                       handler:^(UIAlertAction *a) {
+                                                       handler:^(QHDialogAction *a) {
                                                            (void)a;
                                                            [QHBridge request:command
                                                                      payload:@{@"expectedRevision" : revision}

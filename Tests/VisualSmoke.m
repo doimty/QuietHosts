@@ -6,6 +6,7 @@
 #include <math.h>
 #include <stdlib.h>
 static NSUInteger Requests = 0, Writes = 0, Checks = 0, Failures = 0;
+extern void QHRunDialogSmoke(QHAppController *,void (^)(NSUInteger,NSUInteger));
 @implementation QHBridge
 + (void)request:(NSString *)command payload:(NSDictionary *)payload completion:(void (^)(NSDictionary *))completion {
     (void)payload;
@@ -208,11 +209,17 @@ static NSUInteger CountClass(UIView *view, Class type) {
         }];
         [UIImagePNGRepresentation(previewImage) writeToFile:[documents stringByAppendingPathComponent:@"preview.png"] atomically:YES];
         Check(Writes==0,@"no file/DNS commands and no implicit confirmation");
-        NSDictionary *report=@{@"checks":@(Checks),@"failures":@(Failures),@"mock_status_requests":@(Requests),@"writes":@(Writes),@"scope":@"UIKit simulator layout/component/controller smoke; not device or real helper acceptance"};
-        [[NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:nil]
-            writeToFile:[documents stringByAppendingPathComponent:@"result.json"] atomically:YES];
-        NSLog(@"QH_UI_SMOKE %@",report);
-        exit(Failures ? 1 : 0);
+        [self.controller.rootController dismissViewControllerAnimated:NO completion:^{
+            QHRunDialogSmoke(self.controller,^(NSUInteger dialogChecks,NSUInteger dialogFailures) {
+                Checks+=dialogChecks;Failures+=dialogFailures;
+                Check(Writes==0,@"dialog flows never send write/reload or implicit consent");
+                NSDictionary *report=@{@"checks":@(Checks),@"failures":@(Failures),@"dialog_checks":@(dialogChecks),@"mock_status_requests":@(Requests),@"writes":@(Writes),@"scope":@"UIKit simulator layout/dialog lifecycle smoke; not device or real helper acceptance"};
+                [[NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:nil]
+                    writeToFile:[documents stringByAppendingPathComponent:@"result.json"] atomically:YES];
+                NSLog(@"QH_UI_SMOKE %@",report);
+                exit(Failures ? 1 : 0);
+            });
+        }];
     });
 }
 @end

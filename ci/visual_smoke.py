@@ -17,7 +17,7 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
         shutil.copytree(ROOT/'App/Resources'/f'{locale}.lproj',app/f'{locale}.lproj')
     sdk=read('xcrun','--sdk','iphonesimulator','--show-sdk-path').strip()
     arch=read('uname','-m').strip()
-    sources=['Tests/VisualSmoke.m','App/QHAppController.m','App/QHVisualComponents.m','App/QHStore.m','App/QHDownload.m','Shared/QHRuleEngine.m','Shared/QHStatusPresentation.m','Shared/QHParser.c']
+    sources=['Tests/VisualSmoke.m','Tests/DialogSmoke.m','App/QHDialogController.m','App/QHAppController.m','App/QHVisualComponents.m','App/QHStore.m','App/QHDownload.m','Shared/QHRuleEngine.m','Shared/QHStatusPresentation.m','Shared/QHParser.c']
     run('xcrun','--sdk','iphonesimulator','clang','-isysroot',sdk,'-arch',arch,'-mios-simulator-version-min=15.0','-fobjc-arc','-fblocks','-DQH_TESTING=1','-D_DARWIN_C_SOURCE','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-Werror=unguarded-availability','-framework','UIKit','-framework','Foundation','-framework','CoreGraphics','-framework','UniformTypeIdentifiers',*sources,'-o',str(app/'QHVisualSmoke'))
     run('codesign','--force','--sign','-',str(app))
     devices=json.loads(read('xcrun','simctl','list','devices','available','--json'))['devices']

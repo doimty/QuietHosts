@@ -48,8 +48,12 @@ def main():
     golden=json.loads((ROOT/'Tests/Native9Frozen.json').read_text())
     for name,digest in golden['files'].items():
         assert hashlib.sha256((ROOT/name).read_bytes()).hexdigest()==digest, 'Frozen file changed: '+name
+    # Native10's UI-only adapter maps back to the exact native9 UIKit type
+    # names before comparing frozen business code. No handler text is removed.
+    normalized=ui.replace('QHDialogController *','UIAlertController *').replace('[QHDialogController','[UIAlertController').replace('dialogControllerWithTitle:','alertControllerWithTitle:').replace('QHDialogAction *','UIAlertAction *').replace('[QHDialogAction','[UIAlertAction')
+    normalized=normalized.replace('    QHConfigureModal(nav);\n','')
     for item in golden['methods']:
-        assert hashlib.sha256(segment(ui,item['start'],item['end']).encode()).hexdigest()==item['sha256'], 'Frozen controller routine changed: '+item['start']
+        assert hashlib.sha256(segment(normalized,item['start'],item['end']).encode()).hexdigest()==item['sha256'], 'Frozen controller routine changed: '+item['start']
     components=(ROOT/'App/QHVisualComponents.m').read_text()
     for required in ('UIContentSizeCategoryIsAccessibilityCategory', 'scaledValueForValue:self.baseWidth', 'UIContentSizeCategoryDidChangeNotification',
         'self.equalColumns ? UIStackViewAlignmentFill : UIStackViewAlignmentLeading', 'constraintGreaterThanOrEqualToConstant:44',

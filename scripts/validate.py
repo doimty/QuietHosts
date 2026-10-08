@@ -25,14 +25,17 @@ def main():
  p=argparse.ArgumentParser();p.add_argument('--stage',type=pathlib.Path);p.add_argument('--release',action='store_true',help='Reject nonnumeric package versions for formal releases');a=p.parse_args();check_locale()
  c=dict(x.split(': ',1) for x in (ROOT/'control').read_text().splitlines() if ': 'in x)
  if a.release:require(re.fullmatch(r'[0-9]+(?:\.[0-9]+)*(?:-[0-9]+)?',c['Version']) is not None,'Formal release version must be numeric (no native/beta suffix)')
- require(c['Package']=='com.doimty.quiethosts' and c['Version']=='0.1.0-1+native9','Package identity mismatch')
+ require(c['Package']=='com.doimty.quiethosts' and c['Version']=='0.1.0-1+native10','Package identity mismatch')
  info=plist(ROOT/'App/Resources/Info.plist')
  require(info['MinimumOSVersion']=='15.0','Wrong deployment target')
- require(info['CFBundleVersion']=='9','Wrong bundle build number')
+ require(info['CFBundleVersion']=='10','Wrong bundle build number')
  require(info['CFBundleShortVersionString']=='0.1.0','Wrong App version')
  workflow=(ROOT/'.github/workflows/native.yml').read_text()
  require('deb=packages/'+c['Package']+'_'+c['Version']+'_'+c['Architecture']+'.deb' in workflow,'CI package filename mismatch')
  require(info['CFBundleLocalizations']==['en','zh-Hans'],'Locales missing')
+ from test_native10_ui import check_icon
+ for name,size in [('Icon1024.png',1024),('Icon60@3x.png',180),('Icon60@2x.png',120)]:
+  check_icon(ROOT/'App/Resources'/name,size)
  for name in ('postinst','prerm','postrm'):
   text=(ROOT/'layout/DEBIAN'/name).read_text();require('rm 'not in text and 'cp 'not in text,'Unsafe maintainer file operation')
  require('restore-for-uninstall' in (ROOT/'layout/DEBIAN/prerm').read_text(),'No checked removal')
@@ -45,6 +48,9 @@ def main():
   packaged=dict(x.split(': ',1) for x in (s/'DEBIAN/control').read_text().splitlines() if ': ' in x)
   for key in ('Package','Version','Architecture','Depends','Conflicts'):
    require(packaged[key]==c[key],'Staged package metadata mismatch: '+key)
+  for name,size in [('Icon1024.png',1024),('Icon60@3x.png',180),('Icon60@2x.png',120)]:
+   check_icon(app/name,size)
+   require((app/name).read_bytes()==(ROOT/'App/Resources'/name).read_bytes(),'Staged icon mismatch: '+name)
   for p in (app/'QuietHosts',helper):print(macho(p))
   require(stat.S_IMODE(helper.stat().st_mode)==0o4755,'Helper not setuid')
   for locale in ('en','zh-Hans'):
