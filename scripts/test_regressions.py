@@ -25,25 +25,11 @@ with tempfile.TemporaryDirectory(prefix='qh-regressions-') as folder:
  assert 'QHImportCancel' in cancel and 'finishBusy' in cancel and 'pickingAllowlist = NO' in cancel
  select=ui.split('- (void)documentPicker:',1)[1].split('- (void)editText:',1)[0]
  assert 'QHImportSelect' in select and 'QHImportFinishRead' in select
- # The theme control must remain Apple's native segmented control, with system
- # touch size and dynamic colors rather than a hand-drawn toggle.
- theme=ui.split('- (void)renderSettings {',1)[1].split('- (void)retryReload',1)[0]
- assert 'UISegmentedControl *theme' in theme
- assert 'theme.selectedSegmentTintColor = Accent()' in theme
- assert '[theme.heightAnchor constraintGreaterThanOrEqualToConstant:44]' in theme
- assert 'self.stack.spacing = 14' in ui and 'card.layoutMargins = UIEdgeInsetsMake(16, 16, 16, 16)' in ui
- home=ui.split('- (void)render {',1)[1].split('- (void)renderRules {',1)[0]
- assert 'AddActionRow(actions, &hasAction' in home and 'ActionSeparator()' in ui
- assert home.count('AddActionRow(actions, &hasAction') >= 3
- assert 'Button(QHL(@"Apply draft"), YES' in home
- assert 'QHL(@"Draft is stored on this device. Apply it to update managed Hosts.")' in home
- assert 'This draft was saved to the helper in this session.' not in home
- assert 'draftCount setContentHuggingPriority' in home or 'draftCount setContentHuggingPriority' in ui
- assert 'draftUnit setContentHuggingPriority' in home or 'draftUnit setContentHuggingPriority' in ui
- assert 'Duplicates removed during merge' in home
- assert 'AddActionRow(data, &hasDataAction' in ui
- assert 'AddActionRow(allow, &hasAllowAction' in ui
- assert 'AddActionRow(card, &hasSourceAction' in ui
+ # Native9 replaces the inline segmented control and separate source cards with
+ # native selection/list/detail components. Keep behavior gates in the dedicated
+ # structural/frozen-scope suite, plus execute actual UIKit fixtures in CI.
+ run(['python3', 'scripts/test_native9_ui.py'])
+ assert 'self.stack.spacing = 14' in ui
  build=(root/'Makefile').read_text()
  assert 'SUBPROJECTS = App Helper' in build and 'CCSupport' not in build
  assert not (root/'Module').exists()

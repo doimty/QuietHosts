@@ -1,0 +1,25 @@
+# Native9 · HTML 视觉语言的原生落地
+
+## 基线和范围
+基线 `967e5d66b9157532a68b54181592c45c6a9dd996` / native8；独立分支 `feat/native9-html-ui`。用户要求按已选紫色 HTML 草图实施真实 UIKit，而不是仅换颜色。测试版 `0.1.0-1+native9`、App build9、CI filename同步；正式版仍遵循纯数字和 dpkg升级顺序。
+
+## 验收标准
+- 首页：品牌头卡＋真实状态胶囊/盾牌底块，独立 Hosts 状态卡与受检开关，可收起的草稿提示，真实唯一域名/duplicates 双格统计、显式应用主按钮，分组快捷行。
+- 规则：所有来源聚合为图标/名称/启用说明/数量胶囊/箭头列表；详情页保留精确来源开关、解析统计、移除确认；白名单和规则格式分组。不能把不支持格式或跳过统计藏掉。
+- 设置：组外小标题，主题选择行进入原生控件，规则/文件列表、独立恢复危险操作、实际 App 版本和依赖信息。
+- 应用/导入预览：详细授权说明保留；表单式标题/数值分行、来源解析汇总、规则语义提示、显式确认，样例可展开查看；取消/确认仍沿原流程。
+- 可访问性：动态字体，标签多行，紧凑宽度/辅助大字切纵向；无固定页面高度、无无条件 optional delegate super，装饰图标不重复朗读；可点击目标至少44。
+
+## 冻结范围
+Helper、Shared、解析/下载/Store/通知和真实事务/确认流程、依赖、签名权限、安装卸载脚本冻结。主开关仅对已验证active/inactive可用：立即恢复显示旧状态，再调用原 prepareHelperCommand（重新读取状态/固定revision/明确确认），不能先显示成功，也不替代首次应用授权。未管理、冲突、未知、busy一律不可用。首次或新草稿必须走旧 prepareApply。
+
+Helper没有托管文件字节数和真实应用白名单字段：不能把本地草稿大小/白名单假标成已应用数据。首页托管区只显示helper实际返回的count/baseline，草稿区大小明确标为生成大小。'一致'仅复用本会话真实applied revisions，不由域名数量猜测。
+
+## 独立失败信号及验证
+- 对照native8保护方法/非UI文件逐字节，只有render/preview展示和新UI入口改变；安全回调禁止绕过prepareApply/prepareHelperCommand；按钮不得直接发apply/enable/disable。
+- 来源详情随着busy/草稿变化重绘，找不到已移除来源明确显示，不能持有陈旧result继续编辑。
+- 源码/组件/双语/DynamicType/冻结契约＋对应负例，portable既有解析/目录/进程/mock套件； macOS Foundation 与 Apple UIKit实际编译只在Actions。
+- deb数字root、helper04755、arm64e iOS15、签名代码页、entitlements、无CC/额外注入、版本元数据一致；artifact SHA单独核对。
+- 旧布局的源码必须被新结构门禁拒绝；CI失败不交付。独立审查无交付不能称通过。
+
+实际明暗、大字、小屏、VoiceOver/长标题与操作触摸，需要本版真机验收；HTML图片不是原生截图。构建/审包结果另记交付收据，不预写成功。

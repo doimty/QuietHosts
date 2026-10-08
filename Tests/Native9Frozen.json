@@ -1,0 +1,57 @@
+{
+  "baseline": "967e5d66b9157532a68b54181592c45c6a9dd996",
+  "files": {
+    "App/Entitlements.plist": "5f58e29c1b21488fa657cea052c22932597f689e0cc8a68b9e48636449b5a30f",
+    "App/QHDownload.h": "4e1482e0510b6c6e83db32287c0e819598f3a700e21eb337d7fae1a5b0638cfe",
+    "App/QHDownload.m": "4ef669eda2b1b703ede2abe33c612d6983abccaab9a248f906534b4721438cb0",
+    "App/QHStore.h": "c9a9346a2d761018c63c102a013f0d3b0779f858f5cbc1e8f6ad55966e719a4f",
+    "App/QHStore.m": "a73daab45c4198c894bac630efe87c41a6275b12eaaae03054940422d695e750",
+    "Helper/Entitlements.plist": "5f58e29c1b21488fa657cea052c22932597f689e0cc8a68b9e48636449b5a30f",
+    "Helper/Makefile": "724fa731a58b60582976e28b96fbdadd6f2fac99564ce3b558d9d55f91ebb1c4",
+    "Helper/QHDNSReload.c": "0906bc454b86300cc83da1e4fd9d7e696d658f866120681d91d942a1e462b488",
+    "Helper/QHDNSReload.h": "a506de50bdbe59e40b66d8e95067e5854fffb22bd60f702e6e6d3d7897a42189",
+    "Helper/QHDirectoryPolicy.h": "113a349005ebe84bc52676c9f25deb0aa07cc0f13149efaf6bb8f99b7240e79a",
+    "Helper/QHFileManager.h": "d10beec1907519b4db92f5ea0b89c82597ae7adeaf48ef785896d9f9d08869c4",
+    "Helper/QHFileManager.m": "e1a6a1555b9420785f7facfb2c3ba0eb7514dbf7dfb19eeaf04a6394d9695d6e",
+    "Helper/main.m": "f7c956262d37868fc3f710486872bc99b1ee717de742a6e3125d16cb1e9b0a7c",
+    "Makefile": "798b4046c7cd79b96ce96e47270f21eb82b1bcaa8779505c2617c3179d258311",
+    "Shared/QHBridge.h": "b22fbedc1047b8de10a17f222d91f4f6070dcf35d48fdbf12336b95749ab28c8",
+    "Shared/QHBridge.m": "63ba2c5c8e96d8f5b7082011f0908e355548fce11d75349933f8d53221c4fff3",
+    "Shared/QHLocalization.h": "c640be5e7aad65d6a9906fe76bce052e1486d3efdf4299528d2e81e661b6c584",
+    "Shared/QHParser.c": "fc107af874785c319a912235578edc5e2dc00e4f66e506c48d6217af3d04b78d",
+    "Shared/QHParser.h": "492493a1da122571a32910bc6794ee1b4932c97dd134ad76736b58c823c24eb2",
+    "Shared/QHProcess.c": "13e8740c9ea419335212503e0b694578014982f706dd5278b17565d5c0394b33",
+    "Shared/QHProcess.h": "497e75b64179455a9944028f40acf7657570006f235c34ed31bdbfe538a6b21b",
+    "Shared/QHRuleEngine.h": "ab9ee4ec2eb244a521765271fab99060f66bcf8846ccd17cc491d1d7bc674a59",
+    "Shared/QHRuleEngine.m": "2a143e196a5161f2ad626b238d84d1432f34f963cd14e42565bcb1b1773b915e",
+    "Shared/QHStatusPresentation.h": "908137c344e2586f1b45d8f0a82a7e288bfbc2cbf650b8f8db7c6eacea60a41c",
+    "Shared/QHStatusPresentation.m": "c335b694859fede63ae3ee4850ab6e2e38ba6bcfd95a3b83715ab5ab0f99bb57",
+    "Shared/QHStrictAddress.h": "2e899c9c45997d619b0822bcb5381671537f7dae83b92d662d4434e57c9a51be",
+    "ci/prepare.py": "57e93ed3ea991d7dc0b8e37538dab3791a1183196f65b5b4021aae61422064ce",
+    "layout/DEBIAN/postinst": "01cab4701b021d296ec2b5750db7e22c2948927ac807fec6b8955747cfc556ed",
+    "layout/DEBIAN/postrm": "b40f51601acec98a1d3adae0728cc896aa91fdf281cd6c634f743fe576aff7e4",
+    "layout/DEBIAN/prerm": "fc578fb181308052653aa10478dfb1dc0284f575309ed697e42d10b10c8abe1d"
+  },
+  "methods": [
+    {
+      "start": "- (void)dealloc {",
+      "end": "- (void)addHeading:",
+      "sha256": "5c620481fc26db9d01ee75e876c1285f87fa2853e0b8d1a7236dfdca7ce503f3"
+    },
+    {
+      "start": "- (void)retryReload {",
+      "end": "- (void)showDiagnostics:",
+      "sha256": "b3761bf9f5b1ed22921c4fe35e0e543bf9764019425d67bbaf731e927e4e7a65"
+    },
+    {
+      "start": "- (void)showDiagnostics:",
+      "end": "- (void)showPreview:",
+      "sha256": "cd7e06e281b84a54e299b70f192de0b5c2564f6946c6bb5ac62bbd13657e51ab"
+    },
+    {
+      "start": "- (void)candidateSources:",
+      "end": null,
+      "sha256": "80de708b04333d921f7128f7c8d77b5d4e63f3728c5ad17cc9713fc7f7d4d97f"
+    }
+  ]
+}

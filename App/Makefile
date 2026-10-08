@@ -1,6 +1,6 @@
 include $(THEOS)/makefiles/common.mk
 APPLICATION_NAME = QuietHosts
-QuietHosts_FILES = main.m QHAppDelegate.m QHAppController.m QHStore.m QHDownload.m ../Shared/QHRuleEngine.m ../Shared/QHStatusPresentation.m ../Shared/QHParser.c ../Shared/QHBridge.m ../Shared/QHProcess.c
+QuietHosts_FILES = main.m QHAppDelegate.m QHAppController.m QHVisualComponents.m QHStore.m QHDownload.m ../Shared/QHRuleEngine.m ../Shared/QHStatusPresentation.m ../Shared/QHParser.c ../Shared/QHBridge.m ../Shared/QHProcess.c
 QuietHosts_FRAMEWORKS = UIKit Foundation UniformTypeIdentifiers
 QuietHosts_LIBRARIES = roothide
 QuietHosts_RESOURCE_DIRS = Resources

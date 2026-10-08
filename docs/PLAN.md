@@ -1,7 +1,7 @@
 # QuietHosts / 静域 · native implementation plan
 
 ## Scope and baseline
-Standalone native UIKit app and restricted one-shot helper for iOS 15+ RootHide. Native7 removes the previous Control Center module because it never appeared in Settings. The product has no CCSupport dependency or Control Center toggle. Product name is 静域 / QuietHosts; package `com.doimty.quiethosts`. Native8 builds on native7 (App + helper only). Work stays in this repository on `fix/purple-ui-native8`; install/respring/Hosts changes are separate operations. See `docs/NATIVE8.md` for the current UI scope, failure signals and validation plan.
+Standalone native UIKit app and restricted one-shot helper for iOS 15+ RootHide. Native7 removes the previous Control Center module because it never appeared in Settings. The product has no CCSupport dependency or Control Center toggle. Product name is 静域 / QuietHosts; package `com.doimty.quiethosts`. Native9 builds on native8 (App + helper only) and implements the selected HTML layout as real native components. Work stays in this repository on `feat/native9-html-ui`; install/respring/Hosts changes are separate operations. See `docs/NATIVE9.md` for the current UI scope, failure signals and validation plan. UIKit layout/component/controller smoke runs in an isolated CI simulator with a mock Bridge; it never invokes the real helper and is not device acceptance.
 
 Frozen dependencies: user's LetMeBlock `1.3.0-1+native1` (3b4057d3e293ca4fc96a7d1bafb29a386a300bb9) and official roothide libSandy `1.1.6-4`; neither is rebuilt or edited. No duplicate DNS tweak. Theos and SDK remain pinned to the last successful Actions build; Apple compilation stays in GitHub Actions.
 

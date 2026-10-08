@@ -1,7 +1,7 @@
 name: QuietHosts native roothide
 on:
   push:
-    branches: [feat/native-app, fix/device-layout-diagnostics, fix/reload-and-rule-import, fix/purple-ui-native8]
+    branches: [feat/native-app, fix/device-layout-diagnostics, fix/reload-and-rule-import, fix/purple-ui-native8, feat/native9-html-ui]
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,6 +29,8 @@ jobs:
           python3 scripts/test.py 2>&1 | tee build-metadata/tests.txt
           python3 scripts/validate.py
           git diff --check
+      - name: Run isolated UIKit simulator layout smoke
+        run: python3 ci/visual_smoke.py
       - name: Prepare pinned toolchain only
         run: python3 ci/prepare.py --theos "$THEOS" --work "$QH_INPUTS"
       - name: Build app and restricted helper
@@ -39,7 +41,7 @@ jobs:
       - name: Validate package and signed entitlements
         run: |
           set -euo pipefail
-          deb=packages/com.doimty.quiethosts_0.1.0-1+native8_iphoneos-arm64e.deb
+          deb=packages/com.doimty.quiethosts_0.1.0-1+native9_iphoneos-arm64e.deb
           test -f "$deb"
           python3 ci/canonicalize_deb.py "$deb" | tee build-metadata/ownership-repack.txt
           python3 scripts/check_package_ownership.py "$deb" | tee build-metadata/ownership-check.txt
