@@ -1,7 +1,7 @@
 name: QuietHosts native roothide
 on:
   push:
-    branches: [feat/native-app, fix/device-layout-diagnostics, fix/reload-and-rule-import, fix/purple-ui-native8, feat/native9-html-ui, feat/native10-unified-dialogs]
+    branches: [feat/native-app, fix/device-layout-diagnostics, fix/reload-and-rule-import, fix/purple-ui-native8, feat/native9-html-ui, feat/native10-unified-dialogs, fix/native12-dependency-copy]
   workflow_dispatch:
 permissions:
   contents: read
@@ -41,7 +41,7 @@ jobs:
       - name: Validate package and signed entitlements
         run: |
           set -euo pipefail
-          deb=packages/com.doimty.quiethosts_0.1.0-1+native11_iphoneos-arm64e.deb
+          deb=packages/com.doimty.quiethosts_0.1.0-1+native12_iphoneos-arm64e.deb
           test -f "$deb"
           python3 ci/canonicalize_deb.py "$deb" | tee build-metadata/ownership-repack.txt
           python3 scripts/check_package_ownership.py "$deb" | tee build-metadata/ownership-check.txt

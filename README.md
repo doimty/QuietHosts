@@ -1,6 +1,6 @@
 # 静域 / QuietHosts
 
-Standalone native UIKit Hosts manager for iOS 15+ RootHide. Current test candidate: `0.1.0-1+native11`. Native11 fixes the initial dialog height: options, input and paragraph diagnostics open expanded, while short confirmations stay compact. It preserves native10's unified sheets/icon and the native9 page layout. Native10 keeps the native9 page layout, unifies message/confirmation/diagnostic/options/URL dialogs as purple native sheets and updates the App icon. See `docs/NATIVE10.md` for scope and validation requirements; the cloud delivery receipt records actual build/simulator evidence, not device acceptance. The Control Center module remains removed; manage QuietHosts from its app. Native9 implements the purple HTML layout as real UIKit: brand/status header, confirmed managed-rules switch, adaptive twin draft metrics, grouped source list/detail, settings sections and tabular preview. See `docs/NATIVE9.md` (current), `docs/NATIVE8.md` (color-only baseline) and `docs/NATIVE7.md` (CC removal). Formal releases must use numeric-only package versions, pass `scripts/validate.py --release` and be dpkg-newer than distributed test packages.
+Standalone native UIKit Hosts manager for iOS 15+ RootHide. Current test candidate: `0.1.0-1+native12`. Native12 keeps native11's UI/dialog/icon fixes and only updates dependency wording/metadata to be environment-neutral; rootless is not implemented. The native11 fixes initial dialog height: options, input and paragraph diagnostics open expanded, while short confirmations stay compact. See `docs/DISTRIBUTION_PLAN.md` and `docs/NATIVE10.md`. The Control Center module remains removed; manage QuietHosts from its app. Native9 implements the purple HTML layout as real UIKit: brand/status header, confirmed managed-rules switch, adaptive twin draft metrics, grouped source list/detail, settings sections and tabular preview. See `docs/NATIVE9.md` (current), `docs/NATIVE8.md` (color-only baseline) and `docs/NATIVE7.md` (CC removal). Formal releases must use numeric-only package versions, pass `scripts/validate.py --release` and be dpkg-newer than distributed test packages.
 
 The Home screen separates the verified managed Hosts state from the local rule draft. Importing and editing rules only changes the draft. **Apply draft** explicitly updates the managed Hosts entry; a checked restore returns the saved original state. Online sources update only when requested, while file/pasted sources must be reimported.
 
@@ -10,8 +10,8 @@ Accept Hosts blocking-address rows, bare exact domains, exact `DOMAIN` rows and 
 
 ## Dependencies
 
-- `com.ps.letmeblock >=1.3.0-1+native1`
-- Official RootHide `com.opa334.libsandy >=1.1.6-4` (not rebuilt)
+- `com.ps.letmeblock`
+- `com.opa334.libsandy`
 - `uikittools`
 
 No CCSupport dependency or CC toggle is packaged. QuietHosts conflicts with CCAdsBeGone variants to avoid two managers changing the same Hosts entry; inspect current Hosts before removing either package.
