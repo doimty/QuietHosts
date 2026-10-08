@@ -24,6 +24,15 @@ with tempfile.TemporaryDirectory(prefix='qh-regressions-') as folder:
  assert 'QHImportCancel' in cancel and 'finishBusy' in cancel and 'pickingAllowlist = NO' in cancel
  select=ui.split('- (void)documentPicker:',1)[1].split('- (void)editText:',1)[0]
  assert 'QHImportSelect' in select and 'QHImportFinishRead' in select
+ # The theme control must remain Apple's native segmented control, with system
+ # touch size and dynamic colors rather than a hand-drawn toggle.
+ theme=ui.split('- (void)renderSettings {',1)[1].split('- (void)retryReload',1)[0]
+ assert 'UISegmentedControl *theme' in theme
+ assert 'theme.selectedSegmentTintColor = Accent()' in theme
+ assert '[theme.heightAnchor constraintGreaterThanOrEqualToConstant:44]' in theme
+ assert 'self.stack.spacing = 14' in ui and 'card.layoutMargins = UIEdgeInsetsMake(16, 16, 16, 16)' in ui
+ module=(root/'Module/Resources/Info.plist').read_text()
+ assert '<key>CFBundleSupportedPlatforms</key>' in module and '<string>iPhoneOS</string>' in module
  main=(root/'Helper/main.m').read_text()
  assert 'QHRunDNSReload(path, 15, &DNSChild)' in main
  assert 'setuid(' not in main.replace('No setuid(0)/setgid(0).','')

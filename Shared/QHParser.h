@@ -21,8 +21,8 @@ typedef bool (*QHDomainConsumer)(const char *domain, void *context);
 /* Allocation-free synchronous parser. Fully validates UTF-8 before callbacks;
  * input remains untouched. Domain storage is borrowed, valid only in callback.
  * CR/LF/CRLF physical lines, no phantom EOF line. Emits duplicates; caller owns
- * deduplication and rollback after ANY failure. Block sources also accept exact
- * Surge DOMAIN,name[,REJECT|REJECT-DROP] records; other actions/options, suffix,
+ * deduplication and rollback after ANY failure. Block sources accept exact
+ * Surge-family DOMAIN and Quantumult X HOST rows; other actions/options, suffix,
  * keyword, wildcard and URL/IP rules are not flattened. Strict allowlist accepts only
  * one exact bare name per line; firstRejectedLine identifies whole-list failure.
  * acceptedNames includes a callback which returns false. Unsupported counts

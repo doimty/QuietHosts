@@ -7,8 +7,7 @@ Frozen dependencies: user's already delivered LetMeBlock `1.3.0-1+native1` (3b40
 
 ## Essential product contract
 - Three pages: Home (state/count/apply/update), Rules (sources+allowlist), Settings (system/light/dark theme, backup/diagnostics). Warm white/graphite with muted teal, native Dynamic Type/VoiceOver, no animations or fake blocking/battery statistics.
-- URL/file/paste -> strict parse -> prospective merged preview -> explicit save/apply. Store per-source local snapshots, enabled status and manual refresh; no background domain resolution and no scheduled updates.
-- Accept Hosts blocking addresses and exact bare domains. Skip and count redirects, local metadata, malformed/unsupported Surge or URL/path/wildcard tokens; never silently flatten suffix/keyword/URL-path to domain. Allowlist is exact bare domains (no pattern semantics in first version).
+- URL/file/paste -> strict parse -> prospective merged preview -> explicit save/apply. Store per-source local snapshots, enabled status and manual refresh; no background domain resolution and no scheduled updates. Accept Hosts blocking-address rows, bare exact domains, and exact-host matchers such as `DOMAIN` and Quantumult X `HOST`; reject non-blocking or unknown policies and never flatten suffix, keyword, IP, URL, or compound match rules into one host.
 - Bound each input to16MiB, all local source bytes32MiB, unique merged domains300000, emitted block file32MiB. Overflow rejects whole batch. These are storage safety bounds, not a claim of good device performance at maximum size. Must test actual user files including 206k-domain source-heavy.
 - No bundled advertising/certificate-service blocklists. Preserve copyright for borrowed MIT input code; no GPL/unknown-license code copied.
 

@@ -103,19 +103,23 @@ static void grammar(void) {
 static void surge_exact(void) {
     Sink sink = {0};
     QHParserStats s = parse("DOMAIN,Ads.Example.\n domain , second.example , REJECT\n"
-                            "DOMAIN,third.example,REJECT-DROP # comment\n0.0.0.0 ads.example\n",
+                            "DOMAIN,third.example,REJECT-DROP # comment\nHOST,qx.example\n"
+                            " host , qx2.example , REJECT\n0.0.0.0 ads.example\n",
                             &sink);
-    assert(sink.count == 4 && s.acceptedNames == 4 && !s.unsupported && !s.invalidNames);
+    assert(sink.count == 6 && s.acceptedNames == 6 && !s.unsupported && !s.invalidNames);
     assert(!strcmp(sink.names[0], "ads.example") && !strcmp(sink.names[1], "second.example"));
-    assert(!strcmp(sink.names[2], "third.example") && !strcmp(sink.names[3], "ads.example"));
+    assert(!strcmp(sink.names[2], "third.example") && !strcmp(sink.names[3], "qx.example"));
+    assert(!strcmp(sink.names[4], "qx2.example") && !strcmp(sink.names[5], "ads.example"));
     sink = (Sink){0};
     s = parse("DOMAIN,safe.example,DIRECT\nDOMAIN,proxy.example,Proxy\n"
               "DOMAIN,bad.example,REJECT,no-resolve\nDOMAIN=not-official.example\n"
               "DOMAIN-SUFFIX,root.example\nDOMAIN-KEYWORD,ads\nURL-REGEX,^https://example/path\n"
-              "IP-CIDR,192.0.2.0/24\nDOMAIN,*.wild.example\n"
+              "IP-CIDR,192.0.2.0/24\nHOST,qx.example,DIRECT\nHOST,ambiguous.example,Hijacking\n"
+              "HOST-SUFFIX,root.example\nHOST-KEYWORD,ads\n.DOMAINSET.example\n+.domainset.example\n"
+              "DOMAIN,*.wild.example\n"
               "DOMAIN,,REJECT\nDOMAIN,1.2.3.4\nDOMAIN,localhost\n",
               &sink);
-    assert(!sink.count && s.unsupported == 9 && s.invalidNames == 2 && s.localNames == 1);
+    assert(!sink.count && s.unsupported == 15 && s.invalidNames == 2 && s.localNames == 1);
     unsigned char bad[] = "DOMAIN,safe.example\n#\xff";
     QHParserStats stats;
     assert(QHParserParse(bad, sizeof(bad) - 1, false, consume, &sink, &stats) == QHParseInvalidEncoding);

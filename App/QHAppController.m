@@ -35,14 +35,14 @@ static UILabel *Label(NSString *text, UIFontTextStyle style, BOOL secondary) {
 static UIStackView *Stack(void) {
     UIStackView *stack = [UIStackView new];
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 14;
+    stack.spacing = 10;
     return stack;
 }
 static UIStackView *Card(void) {
     UIStackView *card = Stack();
     card.backgroundColor = Color(0xffffff, 0x1b2321);
-    card.layer.cornerRadius = 22;
-    card.layoutMargins = UIEdgeInsetsMake(22, 20, 22, 20);
+    card.layer.cornerRadius = 18;
+    card.layoutMargins = UIEdgeInsetsMake(16, 16, 16, 16);
     card.layoutMarginsRelativeArrangement = YES;
     return card;
 }
@@ -54,10 +54,10 @@ static UIButton *Button(NSString *text, BOOL primary, BOOL enabled, void (^actio
     config.cornerStyle = UIButtonConfigurationCornerStyleLarge;
     config.baseBackgroundColor = Accent();
     config.baseForegroundColor = primary ? Background() : Accent();
-    config.contentInsets = NSDirectionalEdgeInsetsMake(14, 16, 14, 16);
+    config.contentInsets = NSDirectionalEdgeInsetsMake(8, 12, 8, 12);
     config.titleTextAttributesTransformer = ^NSDictionary *(NSDictionary *input) {
         NSMutableDictionary *attributes = [input mutableCopy];
-        attributes[NSFontAttributeName] = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+        attributes[NSFontAttributeName] = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
         return attributes;
     };
     button.configuration = config;
@@ -65,7 +65,7 @@ static UIButton *Button(NSString *text, BOOL primary, BOOL enabled, void (^actio
     button.titleLabel.adjustsFontForContentSizeCategory = YES;
     button.enabled = enabled;
     button.accessibilityLabel = text;
-    [button.heightAnchor constraintGreaterThanOrEqualToConstant:48].active = YES;
+    [button.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
     [button addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
                 (void)a;
                 if (action) {
@@ -97,7 +97,7 @@ static BOOL Animate(void) {
     [self.view addSubview:scroll];
     self.stack = Stack();
     self.stack.translatesAutoresizingMaskIntoConstraints = NO;
-    self.stack.spacing = 18;
+    self.stack.spacing = 14;
     [scroll addSubview:self.stack];
     [NSLayoutConstraint activateConstraints:@[
         [scroll.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
@@ -105,12 +105,12 @@ static BOOL Animate(void) {
         [scroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [scroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor
-                                                 constant:22],
+                                                 constant:18],
         [self.stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor
-                                                  constant:-22],
-        [self.stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:16],
-        [self.stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-30],
-        [self.stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-44]
+                                                  constant:-18],
+        [self.stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:12],
+        [self.stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-20],
+        [self.stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-36]
     ]];
 }
 - (void)viewDidAppear:(BOOL)animated {
@@ -494,7 +494,7 @@ static BOOL Animate(void) {
                                        UIFontTextStyleSubheadline, NO)];
         NSUInteger skipped = [result.statistics[@"unsupported"] unsignedIntegerValue];
         if (skipped) {
-            [card addArrangedSubview:Label([NSString stringWithFormat:QHL(@"%@ rules cannot be represented by Hosts and were skipped. Exact DOMAIN records are converted; suffix, keyword, IP-range and URL rules are not."), Number(skipped)], UIFontTextStyleFootnote, YES)];
+            [card addArrangedSubview:Label([NSString stringWithFormat:QHL(@"%@ rules cannot be represented by Hosts and were skipped. Exact DOMAIN/HOST records are converted; suffix, keyword, IP-range and URL rules are not."), Number(skipped)], UIFontTextStyleFootnote, YES)];
         }
         [card addArrangedSubview:Button(QHL(@"Remove from local draft"), NO, !self.busy, ^{
                   [weak removeSource:identifier];
@@ -533,10 +533,19 @@ static BOOL Animate(void) {
     NSString *saved = [NSUserDefaults.standardUserDefaults stringForKey:@"QHTheme"];
     theme.selectedSegmentIndex = [saved isEqual:@"light"] ? 1 : [saved isEqual:@"dark"] ? 2 : 0;
     theme.accessibilityLabel = QHL(@"Appearance");
-    [theme setTitleTextAttributes:@{
-        NSFontAttributeName : [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline]
-    }
-                         forState:UIControlStateNormal];
+    theme.backgroundColor = Color(0xe9ece8, 0x272f2d);
+    theme.selectedSegmentTintColor = Accent();
+    theme.tintColor = Accent();
+    NSDictionary *normalThemeText = @{
+        NSFontAttributeName : [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline],
+        NSForegroundColorAttributeName : UIColor.secondaryLabelColor
+    };
+    NSDictionary *selectedThemeText = @{
+        NSFontAttributeName : [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline],
+        NSForegroundColorAttributeName : Color(0xffffff, 0x12221d)
+    };
+    [theme setTitleTextAttributes:normalThemeText forState:UIControlStateNormal];
+    [theme setTitleTextAttributes:selectedThemeText forState:UIControlStateSelected];
     [theme.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
     [theme addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
                UISegmentedControl *control = (UISegmentedControl *)action.sender;
@@ -553,7 +562,7 @@ static BOOL Animate(void) {
     [manual addArrangedSubview:
                 Label(QHL(@"URL refresh is explicit and sequential. If any source fails, every existing "
                           @"snapshot is kept. File and pasted sources are updated by reimporting."),
-                      UIFontTextStyleBody, YES)];
+                      UIFontTextStyleSubheadline, YES)];
     [manual addArrangedSubview:Label(QHL(@"Add QuietHosts to Control Center using CCSupport. The module "
                                          @"queries the same helper file state."),
                                      UIFontTextStyleFootnote, YES)];
@@ -829,7 +838,7 @@ static BOOL Animate(void) {
                          message:allowlist
                                      ? QHL(@"Replace the entire allowlist. Every nonempty line must be an "
                                            @"exact domain; any invalid entry rejects the whole change.")
-                                     : QHL(@"Hosts, bare domains and exact Surge DOMAIN records are supported. Preview before saving. Suffix, keyword, IP-range and URL rules cannot be expressed by Hosts and are skipped. Large lists should be imported as files.")
+                                     : QHL(@"Hosts, bare domains, exact DOMAIN and HOST rules are supported. Preview before saving. Suffix, keyword, IP-range and URL rules cannot be expressed by Hosts and are skipped. Large lists should be imported as files.")
                   preferredStyle:UIAlertControllerStyleActionSheet];
     if (!allowlist) {
         [alert addAction:[UIAlertAction actionWithTitle:QHL(@"HTTPS URL")
