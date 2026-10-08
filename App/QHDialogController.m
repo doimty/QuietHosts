@@ -14,7 +14,7 @@ void QHConfigureModal(UIViewController *controller) {
     UISheetPresentationController *sheet=controller.sheetPresentationController;
     sheet.detents=@[UISheetPresentationControllerDetent.largeDetent];
     sheet.prefersGrabberVisible=YES;
-    sheet.preferredCornerRadius=@28;
+    sheet.preferredCornerRadius=28;
     sheet.prefersScrollingExpandsWhenScrolledToEdge=YES;
     controller.view.tintColor=DColor(0x5b54e8,0x9b95ff);
     if ([controller isKindOfClass:UINavigationController.class]) {

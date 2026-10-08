@@ -10,6 +10,7 @@ def check(dialog,controller):
     assert 'modalPresentationStyle=UIModalPresentationFormSheet' in dialog
     assert 'controller.modalInPresentation=YES' in dialog
     assert 'sheet.prefersGrabberVisible=YES' in dialog
+    assert 'sheet.preferredCornerRadius=28;' in dialog
     assert 'view.keyboardLayoutGuide.topAnchor' in dialog
     assert 'UISheetPresentationControllerDetent.mediumDetent' in dialog
     handler=dialog.split('- (void)chooseAction:',1)[1].split('- (void)viewDidLoad',1)[0]
