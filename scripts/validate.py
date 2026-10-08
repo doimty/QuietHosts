@@ -22,12 +22,16 @@ def macho(path):
  require(not any('/var/jb' in x or 'AutoPatches' in x for x in deps),'Compatibility library found')
  return {'name':path.name,'minOS':'15.0','arch':'arm64e','dependencies':deps}
 def main():
- p=argparse.ArgumentParser();p.add_argument('--stage',type=pathlib.Path);a=p.parse_args();check_locale()
+ p=argparse.ArgumentParser();p.add_argument('--stage',type=pathlib.Path);p.add_argument('--release',action='store_true',help='Reject nonnumeric package versions for formal releases');a=p.parse_args();check_locale()
  c=dict(x.split(': ',1) for x in (ROOT/'control').read_text().splitlines() if ': 'in x)
- require(c['Package']=='com.doimty.quiethosts' and c['Version']=='0.1.0-1+native7','Package identity mismatch')
+ if a.release:require(re.fullmatch(r'[0-9]+(?:\.[0-9]+)*(?:-[0-9]+)?',c['Version']) is not None,'Formal release version must be numeric (no native/beta suffix)')
+ require(c['Package']=='com.doimty.quiethosts' and c['Version']=='0.1.0-1+native8','Package identity mismatch')
  info=plist(ROOT/'App/Resources/Info.plist')
  require(info['MinimumOSVersion']=='15.0','Wrong deployment target')
- require(info['CFBundleVersion']=='7','Wrong bundle build number')
+ require(info['CFBundleVersion']=='8','Wrong bundle build number')
+ require(info['CFBundleShortVersionString']=='0.1.0','Wrong App version')
+ workflow=(ROOT/'.github/workflows/native.yml').read_text()
+ require('deb=packages/'+c['Package']+'_'+c['Version']+'_'+c['Architecture']+'.deb' in workflow,'CI package filename mismatch')
  require(info['CFBundleLocalizations']==['en','zh-Hans'],'Locales missing')
  for name in ('postinst','prerm','postrm'):
   text=(ROOT/'layout/DEBIAN'/name).read_text();require('rm 'not in text and 'cp 'not in text,'Unsafe maintainer file operation')
@@ -35,6 +39,12 @@ def main():
  if a.stage:
   from localization_core import parse_strings
   s=a.stage;app=s/'Applications/QuietHosts.app';helper=s/'usr/libexec/quiethosts-helper'
+  staged=plist(app/'Info.plist')
+  for key in ('CFBundleVersion','CFBundleShortVersionString','CFBundleIdentifier','MinimumOSVersion'):
+   require(staged[key]==info[key],'Staged App metadata mismatch: '+key)
+  packaged=dict(x.split(': ',1) for x in (s/'DEBIAN/control').read_text().splitlines() if ': ' in x)
+  for key in ('Package','Version','Architecture','Depends','Conflicts'):
+   require(packaged[key]==c[key],'Staged package metadata mismatch: '+key)
   for p in (app/'QuietHosts',helper):print(macho(p))
   require(stat.S_IMODE(helper.stat().st_mode)==0o4755,'Helper not setuid')
   for locale in ('en','zh-Hans'):

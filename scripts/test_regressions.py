@@ -3,6 +3,7 @@ from pathlib import Path
 import os,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 def run(args):subprocess.run(args,cwd=root,check=True)
+run(['python3', 'scripts/test_ui_palette.py'])
 with tempfile.TemporaryDirectory(prefix='qh-regressions-') as folder:
  d=Path(folder)
  flags=['clang','-std=c11','-D_DEFAULT_SOURCE','-D_DARWIN_C_SOURCE','-Wall','-Wextra','-Werror','-pedantic']
@@ -37,6 +38,12 @@ with tempfile.TemporaryDirectory(prefix='qh-regressions-') as folder:
  assert 'Button(QHL(@"Apply draft"), YES' in home
  assert 'QHL(@"Draft is stored on this device. Apply it to update managed Hosts.")' in home
  assert 'This draft was saved to the helper in this session.' not in home
+ assert 'draftCount setContentHuggingPriority' in home or 'draftCount setContentHuggingPriority' in ui
+ assert 'draftUnit setContentHuggingPriority' in home or 'draftUnit setContentHuggingPriority' in ui
+ assert 'Duplicates removed during merge' in home
+ assert 'AddActionRow(data, &hasDataAction' in ui
+ assert 'AddActionRow(allow, &hasAllowAction' in ui
+ assert 'AddActionRow(card, &hasSourceAction' in ui
  build=(root/'Makefile').read_text()
  assert 'SUBPROJECTS = App Helper' in build and 'CCSupport' not in build
  assert not (root/'Module').exists()

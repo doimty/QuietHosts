@@ -204,7 +204,7 @@
 "Rules in managed Hosts: %@ domains" = "当前托管 Hosts 规则：%@ 个域名";
 "Saved rule set: %@ domains" = "已保存规则：%@ 个域名";
 "Draft" = "本地规则草稿";
-"unique domains" = "个去重域名";
+"unique domains" = "个唯一域名";
 "%@ sources · %@ exact allowlist entries" = "%@ 个来源 · %@ 个精确白名单域名";
 "Draft is stored on this device. Apply it to update managed Hosts." = "草稿只保存在本机；点击“应用规则草稿”后才会更新托管 Hosts。";
 "Apply draft" = "应用规则草稿";

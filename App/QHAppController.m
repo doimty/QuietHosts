@@ -18,10 +18,25 @@ static UIColor *Color(unsigned light, unsigned dark) {
     }];
 }
 static UIColor *Background(void) {
-    return Color(0xf5f6f4, 0x121918);
+    return Color(0xf3f2f8, 0x13131a);
+}
+static UIColor *CardBackground(void) {
+    return Color(0xffffff, 0x1d1d26);
+}
+static UIColor *CardSecondaryBackground(void) {
+    return Color(0xfaf9fe, 0x242430);
 }
 static UIColor *Accent(void) {
-    return Color(0x277669, 0x8fc3ad);
+    return Color(0x5b54e8, 0x9b95ff);
+}
+static UIColor *SeparatorColor(void) {
+    return Color(0xecebf4, 0x2c2c38);
+}
+static UIColor *TextPrimary(void) {
+    return Color(0x1b1b22, 0xf0eff8);
+}
+static UIColor *TextSecondary(void) {
+    return Color(0x686875, 0x9e9ea8);
 }
 static UILabel *Label(NSString *text, UIFontTextStyle style, BOOL secondary) {
     UILabel *label = [UILabel new];
@@ -29,7 +44,7 @@ static UILabel *Label(NSString *text, UIFontTextStyle style, BOOL secondary) {
     label.numberOfLines = 0;
     label.font = [UIFont preferredFontForTextStyle:style];
     label.adjustsFontForContentSizeCategory = YES;
-    label.textColor = secondary ? UIColor.secondaryLabelColor : Color(0x202b29, 0xe6ece8);
+    label.textColor = secondary ? TextSecondary() : TextPrimary();
     return label;
 }
 static UIStackView *Stack(void) {
@@ -40,8 +55,8 @@ static UIStackView *Stack(void) {
 }
 static UIStackView *Card(void) {
     UIStackView *card = Stack();
-    card.backgroundColor = Color(0xffffff, 0x1b2321);
-    card.layer.cornerRadius = 18;
+    card.backgroundColor = CardBackground();
+    card.layer.cornerRadius = 20;
     card.layoutMargins = UIEdgeInsetsMake(16, 16, 16, 16);
     card.layoutMarginsRelativeArrangement = YES;
     return card;
@@ -53,7 +68,7 @@ static UIButton *Button(NSString *text, BOOL primary, BOOL enabled, void (^actio
     config.title = text;
     config.cornerStyle = UIButtonConfigurationCornerStyleLarge;
     config.baseBackgroundColor = Accent();
-    config.baseForegroundColor = primary ? Background() : Accent();
+    config.baseForegroundColor = primary ? Color(0xffffff, 0x13131a) : Accent();
     config.contentInsets = NSDirectionalEdgeInsetsMake(8, 12, 8, 12);
     config.titleTextAttributesTransformer = ^NSDictionary *(NSDictionary *input) {
         NSMutableDictionary *attributes = [input mutableCopy];
@@ -83,7 +98,7 @@ static UIButton *ActionRow(NSString *text, NSString *symbol, BOOL enabled, void 
     config.imagePlacement = NSDirectionalRectEdgeLeading;
     config.imagePadding = 12;
     config.contentInsets = NSDirectionalEdgeInsetsMake(8, 4, 8, 4);
-    config.baseForegroundColor = Color(0x202b29, 0xe6ece8);
+    config.baseForegroundColor = TextPrimary();
     config.imageColorTransformer = ^UIColor *(UIColor *color) {
         (void)color;
         return Accent();
@@ -107,7 +122,7 @@ static UIButton *ActionRow(NSString *text, NSString *symbol, BOOL enabled, void 
 }
 static UIView *ActionSeparator(void) {
     UIView *line = [UIView new];
-    line.backgroundColor = UIColor.separatorColor;
+    line.backgroundColor = SeparatorColor();
     [line.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale].active = YES;
     line.isAccessibilityElement = NO;
     return line;
@@ -190,7 +205,7 @@ static BOOL Animate(void) {
     self.textView = [UITextView new];
     self.textView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     self.textView.adjustsFontForContentSizeCategory = YES;
-    self.textView.backgroundColor = Color(0xffffff, 0x1b2321);
+    self.textView.backgroundColor = CardBackground();
     self.textView.layer.cornerRadius = 16;
     self.textView.textContainerInset = UIEdgeInsetsMake(16, 12, 16, 12);
     self.textView.autocorrectionType = UITextAutocorrectionTypeNo;
@@ -450,15 +465,28 @@ static BOOL Animate(void) {
         metric.axis = UILayoutConstraintAxisHorizontal;
         metric.alignment = UIStackViewAlignmentFirstBaseline;
         metric.spacing = 8;
-        [metric addArrangedSubview:Label(Number(self.draft.compiled.domains.count), UIFontTextStyleTitle1, NO)];
-        [metric addArrangedSubview:Label(QHL(@"unique domains"), UIFontTextStyleSubheadline, YES)];
+        UILabel *draftCount = Label(Number(self.draft.compiled.domains.count), UIFontTextStyleTitle1, NO);
+        [draftCount setContentHuggingPriority:UILayoutPriorityRequired
+                                       forAxis:UILayoutConstraintAxisHorizontal];
+        [draftCount setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                                     forAxis:UILayoutConstraintAxisHorizontal];
+        [metric addArrangedSubview:draftCount];
+        UILabel *draftUnit = Label(QHL(@"unique domains"), UIFontTextStyleSubheadline, NO);
+        [draftUnit setContentHuggingPriority:UILayoutPriorityDefaultLow
+                                      forAxis:UILayoutConstraintAxisHorizontal];
+        draftUnit.textAlignment = NSTextAlignmentLeft;
+        [metric addArrangedSubview:draftUnit];
         [draftCard addArrangedSubview:metric];
         [draftCard addArrangedSubview:Label([NSString stringWithFormat:QHL(@"%@ sources · %@ exact allowlist entries"),
                                                Number([self.draft.document[@"sources"] count]),
                                                Number(self.draft.allowlistCount)],
                                            UIFontTextStyleFootnote, YES)];
-        [draftCard addArrangedSubview:Label(QHL(@"Draft is stored on this device. Apply it to update managed Hosts."),
+        [draftCard addArrangedSubview:Label([NSString stringWithFormat:QHL(@"Duplicates removed during merge: %@"),
+                                               Number([self.draft.compiled.statistics[@"duplicates"]
+                                                   unsignedIntegerValue])],
                                            UIFontTextStyleFootnote, YES)];
+        [draftCard addArrangedSubview:Label(QHL(@"Draft is stored on this device. Apply it to update managed Hosts."),
+                                           UIFontTextStyleFootnote, NO)];
         [home addArrangedSubview:draftCard];
     }
     [home addArrangedSubview:Button(QHL(@"Apply draft"), YES, !self.busy && self.draft != nil, ^{
@@ -563,9 +591,10 @@ static BOOL Animate(void) {
         if (skipped) {
             [card addArrangedSubview:Label([NSString stringWithFormat:QHL(@"%@ rules cannot be represented by Hosts and were skipped. Exact DOMAIN/HOST records are converted; suffix, keyword, IP-range and URL rules are not."), Number(skipped)], UIFontTextStyleFootnote, YES)];
         }
-        [card addArrangedSubview:Button(QHL(@"Remove from local draft"), NO, !self.busy, ^{
-                  [weak removeSource:identifier];
-              })];
+        BOOL hasSourceAction = NO;
+        AddActionRow(card, &hasSourceAction, QHL(@"Remove from local draft"), @"trash", !self.busy, ^{
+            [weak removeSource:identifier];
+        });
         [rules addArrangedSubview:card];
     }
     [rules
@@ -580,9 +609,10 @@ static BOOL Animate(void) {
                                                  @"generated blocklist; no wildcard, suffix, or URL rules."),
                                              Number(self.draft.allowlistCount)],
                   UIFontTextStyleFootnote, YES)];
-    [allow addArrangedSubview:Button(QHL(@"Edit or replace allowlist"), NO, !self.busy, ^{
-               [weak chooseImport:YES];
-           })];
+    BOOL hasAllowAction = NO;
+    AddActionRow(allow, &hasAllowAction, QHL(@"Edit or replace allowlist"), @"pencil", !self.busy, ^{
+        [weak chooseImport:YES];
+    });
     [rules addArrangedSubview:allow];
     [rules addArrangedSubview:Label(QHL(@"Saving, toggling, or removing a source changes only the local "
                                         @"draft. Existing managed Hosts stay unchanged until Apply."),
@@ -600,16 +630,16 @@ static BOOL Animate(void) {
     NSString *saved = [NSUserDefaults.standardUserDefaults stringForKey:@"QHTheme"];
     theme.selectedSegmentIndex = [saved isEqual:@"light"] ? 1 : [saved isEqual:@"dark"] ? 2 : 0;
     theme.accessibilityLabel = QHL(@"Appearance");
-    theme.backgroundColor = Color(0xe9ece8, 0x272f2d);
+    theme.backgroundColor = CardSecondaryBackground();
     theme.selectedSegmentTintColor = Accent();
     theme.tintColor = Accent();
     NSDictionary *normalThemeText = @{
         NSFontAttributeName : [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline],
-        NSForegroundColorAttributeName : UIColor.secondaryLabelColor
+        NSForegroundColorAttributeName : TextSecondary()
     };
     NSDictionary *selectedThemeText = @{
         NSFontAttributeName : [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline],
-        NSForegroundColorAttributeName : Color(0xffffff, 0x12221d)
+        NSForegroundColorAttributeName : Color(0xffffff, 0x13131a)
     };
     [theme setTitleTextAttributes:normalThemeText forState:UIControlStateNormal];
     [theme setTitleTextAttributes:selectedThemeText forState:UIControlStateSelected];
@@ -633,16 +663,17 @@ static BOOL Animate(void) {
     [settings addArrangedSubview:manual];
     UIStackView *data = Card();
     [self addHeading:QHL(@"Data and diagnostics") to:data];
-    [data addArrangedSubview:Button(QHL(@"Backup and restore"), NO, !self.busy, ^{
-              [weak showDiagnostics:NO];
-          })];
-    [data addArrangedSubview:Button(QHL(@"Retry DNS reload"), NO,
-                                    !self.busy && [self statusWritable:self.status], ^{
-                                        [weak retryReload];
-                                    })];
-    [data addArrangedSubview:Button(QHL(@"Advanced information"), NO, !self.busy, ^{
-              [weak showDiagnostics:YES];
-          })];
+    BOOL hasDataAction = NO;
+    AddActionRow(data, &hasDataAction, QHL(@"Backup and restore"), @"externaldrive", !self.busy, ^{
+        [weak showDiagnostics:NO];
+    });
+    AddActionRow(data, &hasDataAction, QHL(@"Retry DNS reload"), @"arrow.triangle.2.circlepath",
+                 !self.busy && [self statusWritable:self.status], ^{
+                     [weak retryReload];
+                 });
+    AddActionRow(data, &hasDataAction, QHL(@"Advanced information"), @"info.circle", !self.busy, ^{
+        [weak showDiagnostics:YES];
+    });
     [settings addArrangedSubview:data];
     [settings addArrangedSubview:Label(QHL(@"Local hosts rules. No scheduled refresh or per-domain DNS lookups."),
                                        UIFontTextStyleFootnote, YES)];

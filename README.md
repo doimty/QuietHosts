@@ -1,6 +1,6 @@
 # 静域 / QuietHosts
 
-Standalone native UIKit Hosts manager for iOS 15+ RootHide. Current package candidate: `0.1.0-1+native7`. The Control Center module was removed after it failed to appear in Settings; manage QuietHosts from its app. See `docs/NATIVE7.md`.
+Standalone native UIKit Hosts manager for iOS 15+ RootHide. Current test package candidate: `0.1.0-1+native8`. The Control Center module remains removed; manage QuietHosts from its app. Native8 adds purple dynamic colors, clearer draft statistics and left-aligned secondary actions. See `docs/NATIVE8.md` (current) and `docs/NATIVE7.md` (CC removal). Formal releases must use numeric-only package versions, pass `scripts/validate.py --release` and be dpkg-newer than distributed test packages.
 
 The Home screen separates the verified managed Hosts state from the local rule draft. Importing and editing rules only changes the draft. **Apply draft** explicitly updates the managed Hosts entry; a checked restore returns the saved original state. Online sources update only when requested, while file/pasted sources must be reimported.
 
