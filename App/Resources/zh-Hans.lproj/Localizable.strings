@@ -1,12 +1,12 @@
 /* App keys. English fallback literals; preserve all format arguments. */
 "%@\n\n%@\n\nThe local source document is not a system Hosts backup. Restore uses only the helper's verified baseline, never an app-selected path." = "%@\n\n%@\n\n本地规则源文档不是系统 Hosts 备份。恢复仅使用辅助程序核验过的基线，不接受 App 选择的任意路径。";
-"%@\n\nRequired: native RootHide, LetMeBlock 1.3.0-1+native1, libSandy 1.1.6-4, CCSupport. Installed versions are not verified here.\n\nFixed managed entry: jbroot('/etc/hosts'). RootHide may mirror this as a symlink. Only the helper may replace the entry after validation; this app never writes system Hosts.\n\nLocal sources: this app's Application Support/QuietHosts. Source URLs are private local refresh metadata. No arbitrary path operations are available." = "%@\n\n所需依赖：原生 RootHide、LetMeBlock 1.3.0-1+native1、libSandy 1.1.6-4、CCSupport。此处未核验实际安装版本。\n\n固定托管入口：jbroot('/etc/hosts')。RootHide 可能以符号链接镜像此入口；仅辅助程序可在校验后替换目录项，App 不直接写入系统 Hosts。\n\n本地规则源：本 App 的 Application Support/QuietHosts。来源链接仅作为私有的手动更新元数据保存。不提供任意路径操作。";
+"%@\n\nRequired: native RootHide, LetMeBlock 1.3.0-1+native1, libSandy 1.1.6-4. Installed versions are not verified here.\n\nFixed managed entry: jbroot('/etc/hosts'). RootHide may mirror this as a symlink. Only the helper may replace the entry after validation; this app never writes system Hosts.\n\nLocal sources: this app's Application Support/QuietHosts. Source URLs are private local refresh metadata. No arbitrary path operations are available." = "%@\n\n所需依赖：原生 RootHide、LetMeBlock 1.3.0-1+native1、libSandy 1.1.6-4。此处未核验实际安装版本。\n\n固定托管入口：jbroot('/etc/hosts')。RootHide 可能以符号链接镜像此入口；仅辅助程序可在校验后替换目录项，App 不直接写入系统 Hosts。\n\n本地规则源：本 App 的 Application Support/QuietHosts。来源链接仅作为私有的手动更新元数据保存。不提供任意路径操作。";
 "%@\n\nThe entire refresh was discarded. Every saved snapshot is unchanged." = "%@\n\n本次整批更新已放弃，所有已保存快照均保持不变。";
 "%@ exceptions. Only exact domains are excluded from our generated blocklist; no wildcard, suffix, or URL rules." = "%@ 条例外。仅从我们生成的屏蔽项中排除完整域名，不支持通配符、后缀或 URL 规则。";
 "%@ parsed domains · %@ bytes" = "%@ 个已解析域名 · %@ 字节";
 "%@ sources · %@ exact exceptions" = "%@ 个规则源 · %@ 条精确例外";
 "Accepted: %@ · duplicates: %@" = "接受：%@ · 重复：%@";
-"Add QuietHosts to Control Center using CCSupport. The module queries the same helper file state." = "通过 CCSupport 将静域添加到控制中心。模块查询同一辅助程序的文件状态。";
+
 "Add source" = "添加规则源";
 "Advanced information" = "高级信息";
 "All source inputs, including disabled sources:" = "全部来源输入（包含停用的规则源）：";
@@ -194,6 +194,7 @@
 "Draft saved. Managed Hosts were not changed. Return to Home and choose Apply draft to install these rules." = "规则草稿已保存，托管 Hosts 未更改。返回首页，点击“应用规则草稿”即可更新。";
 "Resume saved rules?" = "重新启用已保存的规则？";
 "Local Hosts rules, in your control." = "本机 Hosts 规则，由你掌控。";
+"Local hosts rules. No scheduled refresh or per-domain DNS lookups." = "本机 Hosts 规则，不会定时更新或逐域名查询 DNS。";
 "Hosts rules are enabled" = "Hosts 规则已启用";
 "Hosts rules are paused" = "Hosts 规则已暂停";
 "Hosts rules are not applied" = "尚未应用 Hosts 规则";

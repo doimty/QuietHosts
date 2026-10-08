@@ -630,9 +630,6 @@ static BOOL Animate(void) {
                 Label(QHL(@"URL refresh is explicit and sequential. If any source fails, every existing "
                           @"snapshot is kept. File and pasted sources are updated by reimporting."),
                       UIFontTextStyleSubheadline, YES)];
-    [manual addArrangedSubview:Label(QHL(@"Add QuietHosts to Control Center using CCSupport. The module "
-                                         @"queries the same helper file state."),
-                                     UIFontTextStyleFootnote, YES)];
     [settings addArrangedSubview:manual];
     UIStackView *data = Card();
     [self addHeading:QHL(@"Data and diagnostics") to:data];
@@ -647,7 +644,8 @@ static BOOL Animate(void) {
               [weak showDiagnostics:YES];
           })];
     [settings addArrangedSubview:data];
-    [settings addArrangedSubview:Label(QHL(@"QuietHosts · native RootHide"), UIFontTextStyleFootnote, YES)];
+    [settings addArrangedSubview:Label(QHL(@"Local hosts rules. No scheduled refresh or per-domain DNS lookups."),
+                                       UIFontTextStyleFootnote, YES)];
 }
 - (void)retryReload {
     if (self.busy || ![self statusWritable:self.status]) {
@@ -690,12 +688,12 @@ static BOOL Animate(void) {
     if (advanced) {
         detail = [NSString
             stringWithFormat:
-                QHL(@"%@\n\nRequired: native RootHide, LetMeBlock 1.3.0-1+native1, libSandy 1.1.6-4, "
-                    @"CCSupport. Installed versions are not verified here.\n\nFixed managed entry: "
-                    @"jbroot('/etc/hosts'). RootHide may mirror this as a symlink. Only the helper may "
-                    @"replace the entry after validation; this app never writes system Hosts.\n\nLocal "
-                    @"sources: this app's Application Support/QuietHosts. Source URLs are private local "
-                    @"refresh metadata. No arbitrary path operations are available."),
+            QHL(@"%@\n\nRequired: native RootHide, LetMeBlock 1.3.0-1+native1, libSandy 1.1.6-4. "
+                @"Installed versions are not verified here.\n\nFixed managed entry: "
+                @"jbroot('/etc/hosts'). RootHide may mirror this as a symlink. Only the helper may "
+                @"replace the entry after validation; this app never writes system Hosts.\n\nLocal "
+                @"sources: this app's Application Support/QuietHosts. Source URLs are private local "
+                @"refresh metadata. No arbitrary path operations are available."),
                 detail];
         detail = [[self statusExplanation:self.status] stringByAppendingFormat:@"\n\n%@", detail];
     }

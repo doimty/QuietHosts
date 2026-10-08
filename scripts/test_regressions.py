@@ -37,8 +37,10 @@ with tempfile.TemporaryDirectory(prefix='qh-regressions-') as folder:
  assert 'Button(QHL(@"Apply draft"), YES' in home
  assert 'QHL(@"Draft is stored on this device. Apply it to update managed Hosts.")' in home
  assert 'This draft was saved to the helper in this session.' not in home
- module=(root/'Module/Resources/Info.plist').read_text()
- assert '<key>CFBundleSupportedPlatforms</key>' in module and '<string>iPhoneOS</string>' in module
+ build=(root/'Makefile').read_text()
+ assert 'SUBPROJECTS = App Helper' in build and 'CCSupport' not in build
+ assert not (root/'Module').exists()
+ assert 'CCSupport' not in ui
  main=(root/'Helper/main.m').read_text()
  assert 'QHRunDNSReload(path, 15, &DNSChild)' in main
  assert 'setuid(' not in main.replace('No setuid(0)/setgid(0).','')

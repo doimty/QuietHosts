@@ -11,7 +11,7 @@ def check():
  assert locales['en'].keys()==locales['zh-Hans'].keys(),'Locale keys differ'
  for k,v in locales['zh-Hans'].items():assert placeholders(k)==placeholders(v),f'Placeholder mismatch {k}'
  calls=0
- for folder in ('App','Shared','Module','Helper'):
+ for folder in ('App','Shared','Helper'):
   for p in (ROOT/folder).rglob('*'):
    if p.suffix not in ('.m','.h','.c'):continue
    for item in extract_literals(p.read_text().replace('QHL(', 'NSL(')):

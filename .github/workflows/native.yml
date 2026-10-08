@@ -31,7 +31,7 @@ jobs:
           git diff --check
       - name: Prepare pinned toolchain only
         run: python3 ci/prepare.py --theos "$THEOS" --work "$QH_INPUTS"
-      - name: Build app, restricted helper and CC module
+      - name: Build app and restricted helper
         run: |
           set -euo pipefail
           chmod 755 layout/DEBIAN/postinst layout/DEBIAN/prerm layout/DEBIAN/postrm
@@ -39,7 +39,7 @@ jobs:
       - name: Validate package and signed entitlements
         run: |
           set -euo pipefail
-          deb=packages/com.doimty.quiethosts_0.1.0-1+native6_iphoneos-arm64e.deb
+          deb=packages/com.doimty.quiethosts_0.1.0-1+native7_iphoneos-arm64e.deb
           test -f "$deb"
           python3 ci/canonicalize_deb.py "$deb" | tee build-metadata/ownership-repack.txt
           python3 scripts/check_package_ownership.py "$deb" | tee build-metadata/ownership-check.txt

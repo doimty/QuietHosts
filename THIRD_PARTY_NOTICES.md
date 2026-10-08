@@ -31,7 +31,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-LetMeBlock, libSandy and CCSupport are separately installed dependencies; their
-binaries are not repackaged here. No AdAway/GPL or SaneHosts code/assets included.
+LetMeBlock and libSandy are separately installed dependencies; their binaries
+are not repackaged here. CCSupport is not a dependency in native7 because the
+Control Center module was removed. No AdAway/GPL or SaneHosts code/assets included.
 The icons and native UI were created for this project. Apple SF Symbols used
 through the system UIImage API, not redistributed as extracted font files.
