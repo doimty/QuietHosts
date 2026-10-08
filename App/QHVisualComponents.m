@@ -143,6 +143,11 @@ UIView *QHVBadge(NSString *text, BOOL positive) {
     label.textColor = positive ? VGood() : VSecondary();
     label.textAlignment = NSTextAlignmentCenter;
     [badge addArrangedSubview:label];
+    // UIStackView itself has no intrinsic content width. Bind its capsule to
+    // the label instead of allowing it to consume the source title's space.
+    [badge.widthAnchor constraintEqualToAnchor:label.widthAnchor constant:20].active = YES;
+    [label setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    badge.accessibilityIdentifier = @"QHVBadge";
     [badge setContentHuggingPriority:UILayoutPriorityDefaultHigh forAxis:UILayoutConstraintAxisHorizontal];
     return badge;
 }
