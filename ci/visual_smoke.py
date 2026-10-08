@@ -29,13 +29,16 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
     run('xcrun','simctl','install',identifier,str(app))
     container=Path(read('xcrun','simctl','get_app_container',identifier,info['CFBundleIdentifier'],'data').strip())
     marker=container/'Documents/software-keyboard-ready.flag'
-    if marker.exists():marker.unlink()
+    captured=container/'Documents/software-keyboard-captured.flag'
+    for flag in (marker,captured):
+        if flag.exists():flag.unlink()
     stop=threading.Event();capture_errors=[]
     def capture_keyboard():
         while not stop.wait(.1):
             if marker.exists():
                 try:
                     subprocess.run(['xcrun','simctl','io',identifier,'screenshot',str(OUT/'visual-software-keyboard-screen.png')],check=True,timeout=20,capture_output=True)
+                    captured.write_text('captured while first responder held')
                 except Exception as error:capture_errors.append(str(error))
                 return
     capture=threading.Thread(target=capture_keyboard,daemon=True);capture.start()

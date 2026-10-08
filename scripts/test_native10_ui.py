@@ -13,6 +13,10 @@ def check(dialog,controller):
     assert 'sheet.preferredCornerRadius=28;' in dialog
     assert 'view.keyboardLayoutGuide.topAnchor' in dialog
     assert 'UISheetPresentationControllerDetent.mediumDetent' in dialog
+    assert 'sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;' in dialog
+    assert 'BOOL compact=self.dialogStyle==UIAlertControllerStyleAlert' in dialog
+    assert 'NSCharacterSet.newlineCharacterSet' in dialog
+    assert '!UIContentSizeCategoryIsAccessibilityCategory' in dialog
     handler=dialog.split('- (void)chooseAction:',1)[1].split('- (void)viewWillAppear:',1)[0]
     for required in ('if (self.resolving', 'self.resolving=YES', 'self.view.userInteractionEnabled=NO',
         'QHDialogController *keepAlive=self', 'completion:^{', 'if (action.handler) action.handler(action)', 'keepAlive.mutableActions=nil'):
@@ -45,7 +49,7 @@ def check_icon(path,size):
 def main():
     dialog=(ROOT/'App/QHDialogController.m').read_text();controller=(ROOT/'App/QHAppController.m').read_text()
     check(dialog,controller)
-    for old,new in [('self.resolving=YES','self.resolving=NO'),('QHDialogController *keepAlive=self','QHDialogController *keepAlive=nil'),('controller.modalInPresentation=YES','controller.modalInPresentation=NO')]:
+    for old,new in [('self.resolving=YES','self.resolving=NO'),('QHDialogController *keepAlive=self','QHDialogController *keepAlive=nil'),('controller.modalInPresentation=YES','controller.modalInPresentation=NO'),('sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;','sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierMedium;')]:
         changed=dialog.replace(old,new);assert changed!=dialog
         try:check(changed,controller)
         except AssertionError:pass
@@ -56,10 +60,12 @@ def main():
     for required in ('eager navigation view does not build content before configuration','rapid duplicate click invokes exactly once',
         'weak URL fields survive handler','UIKeyboardDidShowNotification','becomeFirstResponder',
         'software keyboard actually shown','UIContentSizeCategoryAccessibilityExtraExtraExtraLarge',
-        'dialog-long-dark.png','new sheet presented after previous dismissed','real controller busy released after cancel/error'):
+        'dialog-long-dark.png','new sheet presented after previous dismissed','real controller busy released after cancel/error',
+        'real import and diagnostics open expanded without a swipe',
+        'full-screen capture completed before keyboard dismissal'):
         assert required in smoke,required
     assert 'QHRunDialogSmoke(self.controller,' in (ROOT/'Tests/VisualSmoke.m').read_text()
     assert 'Tests/DialogSmoke.m' in (ROOT/'ci/visual_smoke.py').read_text()
-    print('Native10 source: 7 unified dialog entries, preview/editor chrome, 3 rejected safety mutations and 3 opaque icon sizes PASS')
+    print('Native10 source: 7 unified dialog entries, preview/editor chrome, 4 rejected safety/height mutations and 3 opaque icon sizes PASS')
     print('UIKit dismissal, input and keyboard runtime acceptance require macOS CI; not tested by this script.')
 if __name__=='__main__':main()

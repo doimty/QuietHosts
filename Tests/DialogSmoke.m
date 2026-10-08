@@ -65,6 +65,18 @@ static UIScrollView *DialogScroll(UIView *view) {
         } else [self next];
     });
 }
+- (void)waitForKeyboardCapture:(QHDialogController *)dialog stage:(NSUInteger)stage attempt:(NSUInteger)attempt {
+    NSString *directory=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
+    BOOL captured=[NSFileManager.defaultManager fileExistsAtPath:[directory stringByAppendingPathComponent:@"software-keyboard-captured.flag"]];
+    if(captured || attempt>=100) {
+        [self check:captured name:@"full-screen capture completed before keyboard dismissal"];
+        [self check:dialog.textFields.firstObject.isFirstResponder name:@"keyboard focus retained during screen capture"];
+        [self finishStage:dialog stage:stage];return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(.2*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+        [self waitForKeyboardCapture:dialog stage:stage attempt:attempt+1];
+    });
+}
 - (void)next {
     if (self.stage>=6) { [self controllerFlow:0];return; }
     NSUInteger stage=self.stage++;
@@ -95,6 +107,8 @@ static UIScrollView *DialogScroll(UIView *view) {
     [self.presenter presentViewController:dialog animated:NO completion:^{
         [self check:dialog.modalInPresentation name:@"explicit cancel required"];
         [self check:dialog.sheetPresentationController.prefersGrabberVisible name:@"sheet chrome"];
+        NSString *openingHeight=stage>=2 ? UISheetPresentationControllerDetentIdentifierLarge : UISheetPresentationControllerDetentIdentifierMedium;
+        [self check:[dialog.sheetPresentationController.selectedDetentIdentifier isEqual:openingHeight] name:@"correct opening detent without manual dragging"];
         [self check:self.confirmed+self.cancelled==stage name:@"presentation has no implicit action"];
         if(stage>=4) {
             dialog.overrideUserInterfaceStyle=stage==4 ? UIUserInterfaceStyleLight : UIUserInterfaceStyleDark;
@@ -128,9 +142,7 @@ static UIScrollView *DialogScroll(UIView *view) {
             [NSNotificationCenter.defaultCenter removeObserver:self.keyboardObserver];self.keyboardObserver=nil;
             // The CI driver captures the complete simulator display. The app's
             // own UIWindow renderer cannot include the separate keyboard window.
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(3*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-                [self finishStage:dialog stage:stage];
-            });
+            [self waitForKeyboardCapture:dialog stage:stage attempt:0];
         });
     }];
 }
@@ -156,6 +168,8 @@ static UIScrollView *DialogScroll(UIView *view) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(.3*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
         UIViewController *first=self.presenter.presentedViewController;
         [self check:[first isKindOfClass:QHDialogController.class] name:@"controller uses unified dialog"];
+        [self check:[first.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierLarge] name:@"real import and diagnostics open expanded without a swipe"];
+        if(flow==0 || flow==2) [self snapshot:first.view name:flow==0 ? @"dialog-real-import-expanded.png" : @"dialog-real-diagnostics-expanded.png"];
         if(flow==0) {
             [self check:[[self.controller valueForKey:@"busy"] boolValue] name:@"import owns busy until explicit cancel"];
             [self click:@"Cancel" in:first];[self finishControllerFlow:flow];return;

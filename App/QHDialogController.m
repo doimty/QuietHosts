@@ -13,6 +13,7 @@ void QHConfigureModal(UIViewController *controller) {
     controller.modalInPresentation=YES;
     UISheetPresentationController *sheet=controller.sheetPresentationController;
     sheet.detents=@[UISheetPresentationControllerDetent.largeDetent];
+    sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;
     sheet.prefersGrabberVisible=YES;
     sheet.preferredCornerRadius=28;
     sheet.prefersScrollingExpandsWhenScrolledToEdge=YES;
@@ -98,7 +99,13 @@ void QHConfigureModal(UIViewController *controller) {
     self.contentBuilt=YES;
     self.content.navigationItem.title=@""; // The card owns the single visible heading.
     QHConfigureModal(self);
-    if (!self.mutableFields.count && self.detail.length<500) {
+    // A character-count heuristic alone underestimates Chinese diagnostics and
+    // multi-row choices. Only genuinely short, simple alerts start compact.
+    BOOL compact=self.dialogStyle==UIAlertControllerStyleAlert &&
+        !self.mutableFields.count && self.mutableActions.count<=2 &&
+        self.detail.length<500 && [self.detail rangeOfCharacterFromSet:NSCharacterSet.newlineCharacterSet].location==NSNotFound &&
+        !UIContentSizeCategoryIsAccessibilityCategory(self.traitCollection.preferredContentSizeCategory);
+    if (compact) {
         self.sheetPresentationController.detents=@[UISheetPresentationControllerDetent.mediumDetent,UISheetPresentationControllerDetent.largeDetent];
         self.sheetPresentationController.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierMedium;
     }
