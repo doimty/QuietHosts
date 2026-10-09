@@ -13,6 +13,11 @@ RootHide/Rootless 共用原固定 Theos/SDK，按 scheme 独立 CPU 架构、链
 - 7文件原文逆投影和7负例通过，原黄金未更新；diff --check通过。
 - Foundation rootless：本机exit77 SKIP，不记PASS。macOS夹具已补 apply/disable/enable/卸载恢复、revision CAS、两处崩溃恢复、写前别名/目录替换及删除路由守卫变异，CI强制真正编译执行。
 
+## 首轮云反馈与定点修复
+Run `37876515169` / SHA `848af00`：rootless job 已真实通过 Foundation 352检查及删除路由守卫变异、UIKit 4181检查/106 dialog/0fail/0write，并生成 rootless包。后续 canonicalize 门禁失败，原因是归档重打包脚本固定无前缀 helper 路径；已按scheme/架构/唯一helper明确修复，补真实dpkg双环境19检查，前后data/control字节和mode不变、错误权限/路径/环境拒绝且原包不动。未改生产事务或削弱断言。
+
+同轮RootHide job在模拟器launch300秒超时，输出为空，尚无法判定具体模拟器启动卡点；此次不改超时或删除UI断言，先由下一轮全流程重验。失败工件不作为交付成功证据。
+
 ## 云与设备状态
 云流程已接强制双环境门禁，实际结果以本次 GitHub run / SHA / 实包收据为准，本文件不预写成功。用户native12真机正向反馈不等于rootless设备验收。
 
