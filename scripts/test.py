@@ -5,6 +5,8 @@ run([sys.executable,'scripts/test_parser.py',*(['--sanitize'] if sys.platform=='
 run([sys.executable,'scripts/test_regressions.py'])
 run([sys.executable,'scripts/check_localization.py'])
 run([sys.executable,'scripts/test_directory_policy.py'])
+run([sys.executable,'scripts/test_roothide_alias.py'])
+run([sys.executable,'scripts/test_uninstall_input.py',*(['--output','build-metadata/uninstall-input.json'] if os.environ.get('GITHUB_ACTIONS')=='true' else [])])
 with tempfile.TemporaryDirectory(prefix='qh-process-') as d:
  out=str(pathlib.Path(d)/'test')
  run(['clang','-std=c11','-D_POSIX_C_SOURCE=200809L','-Wall','-Wextra','-Werror','-pthread','Shared/QHProcess.c','Tests/ProcessTests.c','-o',out])

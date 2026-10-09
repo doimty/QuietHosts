@@ -4,7 +4,7 @@ case "${1:-}" in
  remove|deconfigure)
   # Rootless dependency alias is independently verified by the helper. The helper verifies ownership,
   # journal and target fingerprint. Never silently force removal on conflict.
-  /var/jb/usr/libexec/quiethosts-helper restore-for-uninstall </dev/null || {
+  printf '%s\n' '{}' | /var/jb/usr/libexec/quiethosts-helper restore-for-uninstall || {
    echo 'QuietHosts: checked restore failed. Resolve the file conflict before uninstalling.' >&2
    exit 1
   }

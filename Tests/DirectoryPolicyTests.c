@@ -109,6 +109,79 @@ int main(void) {
     CHECK(QHPairedRootLinkAllowed(&s, 0, canonicalPairSlash, strlen(canonicalPairSlash), nativePair,
                                   strlen(nativePair), canonicalPair, strlen(canonicalPair)),
           "single trailing slash accepted");
+
+    /* Exact RootHide candidates come from rootfs(nativePair/primaryRoot),
+     * with realpath(primaryRoot) as an additional spelling. These predicates
+     * validate text only; the descriptor-target tests below prove identity. */
+    const char *rootFSDataAlias =
+        "/rootfs/var/mobile/Containers/Shared/AppGroup/.jbroot-0123456789ABCDEF/var";
+    const char *otherBrandAlias =
+        "/rootfs/var/mobile/Containers/Shared/AppGroup/.jbroot-0123456789ABCDE0/var";
+    const char *fakeRootFSPrefix =
+        "/rootfs/var/mobile/Containers/Shared/AppGroup/.jbroot-0123456789ABCDEF/other/var";
+    const char *primaryNative = "/var/containers/Bundle/Application/.jbroot-0123456789ABCDEF";
+    const char *primaryCanonical = "/private/var/containers/Bundle/Application/.jbroot-0123456789ABCDEF";
+    CHECK(QHBrandedRootFSDataAliasAllowed(rootFSDataAlias, strlen(rootFSDataAlias),
+                                          nativePair, strlen(nativePair)),
+          "reported rootfs alias is bound to current 16-hex brand");
+    CHECK(!QHBrandedRootFSDataAliasAllowed(otherBrandAlias, strlen(otherBrandAlias),
+                                           nativePair, strlen(nativePair)),
+          "rootfs alias for another brand rejected");
+    CHECK(!QHBrandedRootFSDataAliasAllowed(fakeRootFSPrefix, strlen(fakeRootFSPrefix),
+                                           nativePair, strlen(nativePair)),
+          "rootfs prefix forgery rejected");
+    CHECK(QHPairedRootLinkAllowedWithAliases(&s, 0, rootFSDataAlias, strlen(rootFSDataAlias),
+                                             nativePair, strlen(nativePair),
+                                             canonicalPair, strlen(canonicalPair),
+                                             rootFSDataAlias, strlen(rootFSDataAlias), NULL, 0),
+          "observed /rootfs paired-var text accepted exactly");
+    CHECK(!QHPairedRootLinkAllowedWithAliases(&s, 0, otherBrandAlias, strlen(otherBrandAlias),
+                                              nativePair, strlen(nativePair),
+                                              canonicalPair, strlen(canonicalPair),
+                                              rootFSDataAlias, strlen(rootFSDataAlias), NULL, 0),
+          "non-current brand link text rejected");
+    CHECK(!QHPairedRootLinkAllowedWithAliases(&s, 0, "/rootfs/etc", strlen("/rootfs/etc"),
+                                              nativePair, strlen(nativePair),
+                                              canonicalPair, strlen(canonicalPair),
+                                              rootFSDataAlias, strlen(rootFSDataAlias), NULL, 0),
+          "arbitrary /rootfs prefix rejected");
+    CHECK(QHPairedRootLinkAllowedWithAliases(&s, 0, "/", 1,
+                                             primaryNative, strlen(primaryNative),
+                                             primaryCanonical, strlen(primaryCanonical),
+                                             NULL, 0, "/", 1),
+          "reported paired .jbroot backlink to realpath / accepted");
+    CHECK(!QHPairedRootLinkAllowedWithAliases(&s, 0, "/", 1,
+                                              primaryNative, strlen(primaryNative),
+                                              primaryCanonical, strlen(primaryCanonical),
+                                              NULL, 0, primaryNative, strlen(primaryNative)),
+          "arbitrary / backlink rejected when current root realpath is not /");
+    CHECK(!QHPairedRootLinkAllowedWithAliases(&s, 0, "//", 2,
+                                              primaryNative, strlen(primaryNative),
+                                              primaryCanonical, strlen(primaryCanonical),
+                                              NULL, 0, "/", 1),
+          "double slash is not a trailing-slash variation");
+    s.st_uid = 501;
+    CHECK(!QHPairedRootLinkAllowedWithAliases(&s, 0, rootFSDataAlias, strlen(rootFSDataAlias),
+                                              nativePair, strlen(nativePair),
+                                              canonicalPair, strlen(canonicalPair),
+                                              rootFSDataAlias, strlen(rootFSDataAlias), NULL, 0),
+          "rootfs alias symlink with wrong owner rejected");
+    s.st_uid = 0;
+    s.st_nlink = 2;
+    CHECK(!QHPairedRootLinkAllowedWithAliases(&s, 0, rootFSDataAlias, strlen(rootFSDataAlias),
+                                              nativePair, strlen(nativePair),
+                                              canonicalPair, strlen(canonicalPair),
+                                              rootFSDataAlias, strlen(rootFSDataAlias), NULL, 0),
+          "rootfs alias hardlink rejected");
+    s.st_nlink = 1;
+    s.st_mode = S_IFDIR | 0755;
+    CHECK(!QHPairedRootLinkAllowedWithAliases(&s, 0, rootFSDataAlias, strlen(rootFSDataAlias),
+                                              nativePair, strlen(nativePair),
+                                              canonicalPair, strlen(canonicalPair),
+                                              rootFSDataAlias, strlen(rootFSDataAlias), NULL, 0),
+          "rootfs alias requires an lstat symlink");
+    s.st_mode = S_IFLNK | 0777;
+
     const char *badPair[] = {"/rootfs/var/mobile/Containers/Shared/AppGroup/.jbroot-0123456789ABCDEF/var",
                              "/var/mobile/Containers/Shared/AppGroup/.jbroot-OTHER/var",
                              "/var/mobile/Containers/Shared/AppGroup/.jbroot-0123456789ABCDEF/var//",
@@ -162,6 +235,34 @@ int main(void) {
     int fixedVar = openat(privateFD, "var", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     CHECK(fixedVar >= 0, "fixed component nofollow can open fixture");
     if (fixedVar >= 0) {
+        struct stat expected, other;
+        CHECK(fstat(fixedVar, &expected) == 0, "capture trusted var descriptor");
+        CHECK(QHPairedLinkTargetMatches(root, "var", &expected), "official alias reaches held var object");
+        CHECK(fstat(privateFD, &other) == 0, "capture foreign same-mode directory");
+        CHECK(!QHPairedLinkTargetMatches(root, "var", &other), "wrong target identity is rejected");
+        other = expected; other.st_dev++;
+        CHECK(!QHPairedLinkTargetMatches(root, "var", &other), "target device identity remains pinned");
+        other = expected; other.st_uid++;
+        CHECK(!QHPairedLinkTargetMatches(root, "var", &other), "target owner remains pinned");
+        other = expected; other.st_gid++;
+        CHECK(!QHPairedLinkTargetMatches(root, "var", &other), "target group remains pinned");
+        CHECK(fchmod(fixedVar, 0777) == 0, "inject unsafe fixture target mode");
+        CHECK(!QHPairedLinkTargetMatches(root, "var", &expected), "target mode change is rejected");
+        CHECK(fchmod(fixedVar, 0700) == 0, "restore fixture target mode");
+        CHECK(unlinkat(root, "var", 0) == 0 && symlinkat("private", root, "var") == 0,
+              "inject foreign same-permission target");
+        CHECK(!QHPairedLinkTargetMatches(root, "var", &expected), "valid spelling alone cannot authorize foreign target");
+        CHECK(unlinkat(root, "var", 0) == 0 && symlinkat("missing", root, "var") == 0,
+              "inject dangling alias");
+        CHECK(!QHPairedLinkTargetMatches(root, "var", &expected), "dangling alias is rejected");
+        CHECK(unlinkat(root, "var", 0) == 0 && symlinkat("private/var/", root, "var") == 0,
+              "restore fixture alias");
+        int plain = openat(root, "plain", O_WRONLY | O_CREAT | O_EXCL, 0600);
+        CHECK(plain >= 0, "create isolated regular-entry fixture");
+        if (plain >= 0) close(plain);
+        CHECK(!QHPairedLinkTargetMatches(root, "plain", &expected), "regular entry is not a routing directory");
+        CHECK(unlinkat(root, "plain", 0) == 0, "remove isolated regular-entry fixture");
+        CHECK(!QHPairedLinkTargetMatches(root, "var", NULL), "missing trusted anchor is rejected");
         close(fixedVar);
     }
     CHECK(unlinkat(root, "var", 0) == 0, "cleanup fixture link");

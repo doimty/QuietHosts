@@ -1,6 +1,6 @@
 # QuietHosts working rules
 
-- iOS15+ native App + helper. Current native13 candidate supports explicit RootHide/rootless build schemes; rootless is not device-accepted. Read docs/PLAN.md and docs/ROOTLESS_PLAN.md before nontrivial changes.
+- iOS15+ native App + helper. Current native14 candidate supports explicit RootHide/rootless build schemes; rootless is not device-accepted. Read docs/PLAN.md and docs/ROOTLESS_PLAN.md before nontrivial changes.
 - Only this repository; do not modify/rebuild LetMeBlock, libSandy, NetShield2, user mounts or design artifacts.
 - No device commands, installation, restarts, writing real /etc/hosts, or executing third-party scripts. Tests must use isolated temporary fixtures. All Apple compilation through GitHub Actions, not local cross-compilation.
 - RootHide mirrors /etc/hosts: never write through symlinks. Helper only fixed destination/root-owned state and exact allowlisted commands; no arbitrary path arguments. Unknown state/path/ownership/conflicting files -> explicit refusal. Crash recovery must preserve original and foreign content.

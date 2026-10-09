@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <CommonCrypto/CommonDigest.h>
 #import "../Helper/QHFileManager.h"
+#import "../Shared/QHPlatform.h"
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/file.h>
@@ -16,6 +17,14 @@
 #if !defined(QH_TESTING) || !QH_TESTING
 #error SplitRootTests require QH_TESTING=1 and isolated fixtures.
 #endif
+
+/* QH_TESTING test double for the locked RootHide rootfs(const char *) API.
+ * Positive aliases resolve inside the isolated fixture, never actual /rootfs. */
+static NSMutableDictionary<NSString *, NSString *> *SRRootFSAliases;
+NSString *QHPlatformRootFSPathForTesting(NSString *path) {
+    if (![path isAbsolutePath]) return nil;
+    return SRRootFSAliases[path] ?: [@"/rootfs" stringByAppendingString:path];
+}
 
 /* This suite calls only QHFileManager's Foundation core. It never invokes the
  * native helper executable, filesystem paths outside its own fixture, or DNS. */
@@ -449,6 +458,55 @@ static void SRRequireRefusal(QHSplitRootFixture *f, NSString *label) {
     }
     [f checkRaw];
 }
+static void SRRootHideAliasAcceptance(BOOL mixedUID) {
+    QHSplitRootFixture *f = [[QHSplitRootFixture alloc] initWithMixedUID:mixedUID];
+    NSString *privateVar = [f.privateDirectory stringByAppendingPathComponent:@"var"];
+    NSString *pairedBacklink = [f.pairedRoot stringByAppendingPathComponent:@".jbroot"];
+    NSString *aliases = [f.directory stringByAppendingPathComponent:@"official-alias"];
+    NSString *dataParent = [aliases stringByAppendingPathComponent:@"data"];
+    NSString *primaryParent = [aliases stringByAppendingPathComponent:@"primary"];
+    NSString *dataRoot = [dataParent stringByAppendingPathComponent:SRBrand];
+    for (NSString *path in @[ aliases, dataParent, primaryParent, dataRoot ]) {
+        SRDirectory(path, 0755, f.expectedOwner, f.expectedGroup);
+    }
+    NSString *dataAlias = [dataRoot stringByAppendingPathComponent:@"var"];
+    NSString *primaryAlias = [primaryParent stringByAppendingPathComponent:SRBrand];
+    SRRequire(symlink(f.pairedVar.fileSystemRepresentation, dataAlias.fileSystemRepresentation) == 0);
+    SRRequire(symlink(f.root.fileSystemRepresentation, primaryAlias.fileSystemRepresentation) == 0);
+    if (!SRRootFSAliases) SRRootFSAliases = [NSMutableDictionary dictionary];
+    SRRootFSAliases[f.pairedVar] = dataAlias;
+    SRRootFSAliases[f.root] = primaryAlias;
+    SRRequire(unlink(privateVar.fileSystemRepresentation) == 0);
+    SRRequire(symlink(dataAlias.fileSystemRepresentation, privateVar.fileSystemRepresentation) == 0);
+    SRRequire(unlink(pairedBacklink.fileSystemRepresentation) == 0);
+    SRRequire(symlink(primaryAlias.fileSystemRepresentation, pairedBacklink.fileSystemRepresentation) == 0);
+
+    NSDictionary *before = SRCapture(f.directory);
+    NSDictionary *status = f.status;
+    SRCheck([status[@"ok"] boolValue],
+            @"official API alias candidates reach the independently held directories");
+    SRCheck([before isEqual:SRCapture(f.directory)], @"alias validation is read-only");
+    [f checkRaw];
+
+    NSString *foreignVar = [f.directory stringByAppendingPathComponent:@"foreign-alias-var"];
+    SRDirectory(foreignVar, 0755, mixedUID ? 501 : f.expectedOwner,
+                mixedUID ? 501 : f.expectedGroup);
+    SRRequire(unlink(dataAlias.fileSystemRepresentation) == 0);
+    SRRequire(symlink(foreignVar.fileSystemRepresentation, dataAlias.fileSystemRepresentation) == 0);
+    SRRequireRefusal(f, @"an allowed data alias must not reach a foreign same-mode object");
+    SRRequire(unlink(dataAlias.fileSystemRepresentation) == 0);
+    SRRequire(symlink(f.pairedVar.fileSystemRepresentation, dataAlias.fileSystemRepresentation) == 0);
+
+    NSString *foreignRoot = [f.directory stringByAppendingPathComponent:@"foreign-alias-root"];
+    SRDirectory(foreignRoot, 0755, mixedUID ? 501 : f.expectedOwner,
+                mixedUID ? 501 : f.expectedGroup);
+    SRRequire(unlink(primaryAlias.fileSystemRepresentation) == 0);
+    SRRequire(symlink(foreignRoot.fileSystemRepresentation, primaryAlias.fileSystemRepresentation) == 0);
+    SRRequireRefusal(f, @"an allowed backlink alias must not reach a foreign same-mode object");
+    [SRRootFSAliases removeObjectForKey:f.pairedVar];
+    [SRRootFSAliases removeObjectForKey:f.root];
+}
+
 static void SRPathAndLinkRefusals(BOOL mixedUID) {
     {
         QHSplitRootFixture *f = [[QHSplitRootFixture alloc] initWithMixedUID:mixedUID];
@@ -466,6 +524,23 @@ static void SRPathAndLinkRefusals(BOOL mixedUID) {
         SRRequire(
             symlink(@"/rootfs/foreign-jbroot".fileSystemRepresentation, link.fileSystemRepresentation) == 0);
         SRRequireRefusal(f, @"paired-root backlink to wrong namespace is refused");
+    }
+    {
+        QHSplitRootFixture *f = [[QHSplitRootFixture alloc] initWithMixedUID:mixedUID];
+        NSString *wrongNative = [f.pairedVar stringByReplacingOccurrencesOfString:SRBrand
+                                                                        withString:@".jbroot-0123456789ABCDE0"];
+        NSString *alias = QHPlatformRootFSPathForTesting(wrongNative);
+        NSString *privateVar = [f.privateDirectory stringByAppendingPathComponent:@"var"];
+        SRRequire(unlink(privateVar.fileSystemRepresentation) == 0);
+        SRRequire(symlink(alias.fileSystemRepresentation, privateVar.fileSystemRepresentation) == 0);
+        SRRequireRefusal(f, @"rootfs link alias for a non-current brand is refused");
+    }
+    {
+        QHSplitRootFixture *f = [[QHSplitRootFixture alloc] initWithMixedUID:mixedUID];
+        NSString *link = [f.pairedRoot stringByAppendingPathComponent:@".jbroot"];
+        SRRequire(unlink(link.fileSystemRepresentation) == 0);
+        SRRequire(symlink("/", link.fileSystemRepresentation) == 0);
+        SRRequireRefusal(f, @"literal / backlink is refused unless current primary root realpath is /");
     }
     {
         QHSplitRootFixture *f = [[QHSplitRootFixture alloc] initWithMixedUID:mixedUID];
@@ -659,6 +734,7 @@ NSUInteger RunSplitRootTests(BOOL mixedUID) {
     }
     @autoreleasepool {
         SRValidLayoutAndOwnership(mixedUID);
+        SRRootHideAliasAcceptance(mixedUID);
         SRRegularAdoptionAndRestore(mixedUID);
         SRAdoptionContractAndBadRegulars(mixedUID);
         SRPathAndLinkRefusals(mixedUID);

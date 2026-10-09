@@ -1,6 +1,6 @@
 Package: com.doimty.quiethosts
 Name: QuietHosts
-Version: 0.1.0-1+native13
+Version: 0.1.0-1+native14
 Architecture: iphoneos-arm64e
 Description: Native Hosts source manager with checked file transactions.
 Maintainer: doimty

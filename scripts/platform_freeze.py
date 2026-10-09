@@ -30,6 +30,29 @@ def _project_c(s):
     return ''.join(out)
 
 def project_frozen_text(s, path):
+    if path == 'layout/DEBIAN/prerm':
+        new = "  printf '%s\\n' '{}' | /usr/libexec/quiethosts-helper restore-for-uninstall || {\n"
+        old = "  /usr/libexec/quiethosts-helper restore-for-uninstall </dev/null || {\n"
+        assert s.count(new) == 1, 'Expected exactly one checked pipe input'
+        s = s.replace(new, old, 1)
+    if path == 'Helper/QHDirectoryPolicy.h':
+        begin = '/* QH_ROOTHIDE_ROOTFS_ALIAS_BEGIN\n'
+        end = '/* QH_ROOTHIDE_ROOTFS_ALIAS_END */'
+        assert s.count(begin) == 1 and s.count(end) == 1, 'RootHide alias extension markers must stay unique'
+        start = s.index(begin)
+        finish = s.index(end, start) + len(end)
+        assert s.startswith('\n\n#endif\n', finish), 'Alias block closing layout changed'
+        finish += 2
+        assert finish > start
+        s = s[:start] + s[finish:]
+    if path == 'Helper/QHFileManager.m':
+        for label in ('CAPTURE', 'RECHECK'):
+            begin = f'/* QH_PAIR_TARGET_{label}_BEGIN */\n'
+            end = f'/* QH_PAIR_TARGET_{label}_END */\n'
+            assert s.count(begin) == 1 and s.count(end) == 1, 'Pair target markers must stay unique'
+            start = s.index(begin)
+            finish = s.index(end, start) + len(end)
+            s = s[:start] + s[finish:]
     if path == 'Makefile':
         s = s.replace('scripts/validate.py --stage "$(THEOS_STAGING_DIR)" --scheme "$(QH_SCHEME)"',
                       'scripts/validate.py --stage "$(THEOS_STAGING_DIR)"')

@@ -866,6 +866,19 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
     }
     _backlinkAnchor = linkStat;
     _backlinkText = [NSData dataWithBytes:text length:(NSUInteger)n];
+/* QH_PAIR_TARGET_CAPTURE_BEGIN */
+#if !defined(QH_ROOTLESS) || !QH_ROOTLESS
+    struct stat pairAfter, backAfter;
+    if (!QHPairedLinkTargetMatches(_privateFD, "var", &_varAnchor) ||
+        !QHPairedLinkTargetMatches(_pairRootFD, ".jbroot", &_rootAnchor) ||
+        fstatat(_privateFD, "var", &pairAfter, AT_SYMLINK_NOFOLLOW) ||
+        !SameStat(pairAfter, _pairLinkAnchor) ||
+        fstatat(_pairRootFD, ".jbroot", &backAfter, AT_SYMLINK_NOFOLLOW) ||
+        !SameStat(backAfter, _backlinkAnchor)) {
+        Fail(@"paired-root-conflict");
+    }
+#endif
+/* QH_PAIR_TARGET_CAPTURE_END */
 }
 - (void)checkPairedLinks {
     if (!_pairedLayout) {
@@ -915,6 +928,16 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
         fstatat(_pairRootFD, ".jbroot", &after, AT_SYMLINK_NOFOLLOW) || !SameStat(before, after)) {
         Fail(@"directory-raced");
     }
+/* QH_PAIR_TARGET_RECHECK_BEGIN */
+#if !defined(QH_ROOTLESS) || !QH_ROOTLESS
+    if (!QHPairedLinkTargetMatches(_privateFD, "var", &_varAnchor) ||
+        !QHPairedLinkTargetMatches(_pairRootFD, ".jbroot", &_rootAnchor) ||
+        fstatat(_privateFD, "var", &after, AT_SYMLINK_NOFOLLOW) || !SameStat(after, _pairLinkAnchor) ||
+        fstatat(_pairRootFD, ".jbroot", &after, AT_SYMLINK_NOFOLLOW) || !SameStat(after, _backlinkAnchor)) {
+        Fail(@"directory-raced");
+    }
+#endif
+/* QH_PAIR_TARGET_RECHECK_END */
 }
 - (void)anchors {
 #if defined(QH_ROOTLESS) && QH_ROOTLESS

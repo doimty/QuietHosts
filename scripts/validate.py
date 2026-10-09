@@ -33,10 +33,10 @@ def main():
  require(c['Architecture']=='iphoneos-arm64e','Source control must preserve RootHide architecture')
  if a.scheme=='rootless':c['Architecture']='iphoneos-arm64'
  if a.release:require(re.fullmatch(r'[0-9]+(?:\.[0-9]+)*(?:-[0-9]+)?',c['Version']) is not None,'Formal release version must be numeric (no native/beta suffix)')
- require(c['Package']=='com.doimty.quiethosts' and c['Version']=='0.1.0-1+native13','Package identity mismatch')
+ require(c['Package']=='com.doimty.quiethosts' and c['Version']=='0.1.0-1+native14','Package identity mismatch')
  info=plist(ROOT/'App/Resources/Info.plist')
  require(info['MinimumOSVersion']=='15.0','Wrong deployment target')
- require(info['CFBundleVersion']=='13','Wrong bundle build number')
+ require(info['CFBundleVersion']=='14','Wrong bundle build number')
  require(info['CFBundleShortVersionString']=='0.1.0','Wrong App version')
  workflow=(ROOT/'.github/workflows/native.yml').read_text()
  require('deb=packages/'+c['Package']+'_'+c['Version']+'_${arch}.deb' in workflow,'CI package filename mismatch')

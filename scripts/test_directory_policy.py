@@ -31,7 +31,27 @@ def baseline_header():
     )
 
 
+def check_platform_alias_contract():
+    platform = (ROOT / "Shared/QHPlatform.h").read_text(encoding="utf-8")
+    rootless = platform.split("#if defined(QH_ROOTLESS) && QH_ROOTLESS", 1)[1].split("#else", 1)[0]
+    assert "<rootless.h>" in rootless
+    assert "rootfs" not in rootless.lower() and "roothide" not in rootless.lower()
+    assert "rootfs(path.fileSystemRepresentation)" in platform
+    assert '"/rootfs/' not in platform, "RootHide alias must come from rootfs(), not a prefix rule"
+
+    policy = (ROOT / "Helper/QHDirectoryPolicy.h").read_text(encoding="utf-8")
+    candidate = policy.split("/* QH_ROOTHIDE_ROOTFS_ALIAS_BEGIN", 1)[1].split(
+        "/* QH_ROOTHIDE_ROOTFS_ALIAS_END */", 1
+    )[0]
+    assert "QHPlatformRootFSPath(native)" in candidate
+    assert "QHBrandedRootFSDataAliasAllowed" in candidate
+    assert "realpath(nativePath, resolved)" in candidate
+    assert "#if defined(__OBJC__) && !(defined(QH_ROOTLESS) && QH_ROOTLESS)" in candidate
+    print("PASS: exact RootHide alias contract; rootless branch has no roothide/rootfs reference")
+
+
 def main():
+    check_platform_alias_contract()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check-baseline", action="store_true",
                         help="also prove original guards fail; requires base commit in local history")
