@@ -1,7 +1,7 @@
-name: QuietHosts native roothide
+name: QuietHosts native dual environment
 on:
   push:
-    branches: [feat/native-app, fix/device-layout-diagnostics, fix/reload-and-rule-import, fix/purple-ui-native8, feat/native9-html-ui, feat/native10-unified-dialogs, fix/native12-dependency-copy]
+    branches: [feat/native-app, fix/device-layout-diagnostics, fix/reload-and-rule-import, fix/purple-ui-native8, feat/native9-html-ui, feat/native10-unified-dialogs, fix/native12-dependency-copy, feat/rootless-support]
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,9 +10,15 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
+    name: build (${{ matrix.scheme }})
     runs-on: macos-15
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        scheme: [roothide, rootless]
     env:
+      QH_SCHEME: ${{ matrix.scheme }}
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -27,7 +33,12 @@ jobs:
           set -euo pipefail
           mkdir -p build-metadata
           python3 scripts/test.py 2>&1 | tee build-metadata/tests.txt
-          python3 scripts/validate.py
+          python3 scripts/test_platform_freeze.py | tee build-metadata/platform-freeze.txt
+          python3 scripts/test_rootless_package.py > build-metadata/rootless-package-fixtures.json
+          python3 scripts/test_rootless_layout.py --output build-metadata/rootless-layout.json
+          python3 scripts/test_rootless_routing.py > build-metadata/rootless-routing.json
+          python3 scripts/test_rootless_native.py 2>&1 | tee build-metadata/rootless-native.txt
+          python3 scripts/validate.py --scheme "$QH_SCHEME"
           git diff --check
       - name: Run isolated UIKit simulator layout smoke
         run: python3 ci/visual_smoke.py
@@ -36,21 +47,24 @@ jobs:
       - name: Build app and restricted helper
         run: |
           set -euo pipefail
-          chmod 755 layout/DEBIAN/postinst layout/DEBIAN/prerm layout/DEBIAN/postrm
-          gmake clean package THEOS_PACKAGE_SCHEME=roothide FINALPACKAGE=1 messages=yes 2>&1 | tee build-metadata/build.txt
+          chmod 755 layout/DEBIAN/postinst layout/DEBIAN/prerm layout/DEBIAN/postrm layout-rootless/DEBIAN/postinst layout-rootless/DEBIAN/prerm layout-rootless/DEBIAN/postrm
+          gmake clean package QH_SCHEME="$QH_SCHEME" FINALPACKAGE=1 messages=yes 2>&1 | tee build-metadata/build.txt
       - name: Validate package and signed entitlements
         run: |
           set -euo pipefail
-          deb=packages/com.doimty.quiethosts_0.1.0-1+native12_iphoneos-arm64e.deb
+          arch=iphoneos-arm64e
+          prefix=''
+          if [ "$QH_SCHEME" = rootless ]; then arch=iphoneos-arm64; prefix=var/jb/; fi
+          deb=packages/com.doimty.quiethosts_0.1.0-1+native13_${arch}.deb
           test -f "$deb"
           python3 ci/canonicalize_deb.py "$deb" | tee build-metadata/ownership-repack.txt
           python3 scripts/check_package_ownership.py "$deb" | tee build-metadata/ownership-check.txt
           mkdir -p "$RUNNER_TEMP/qh-package"
           dpkg-deb -x "$deb" "$RUNNER_TEMP/qh-package"
           dpkg-deb -e "$deb" "$RUNNER_TEMP/qh-package/DEBIAN"
-          python3 scripts/validate.py --stage "$RUNNER_TEMP/qh-package" | tee build-metadata/package.txt
-          ldid -e "$RUNNER_TEMP/qh-package/Applications/QuietHosts.app/QuietHosts" > build-metadata/app-entitlements.plist
-          ldid -e "$RUNNER_TEMP/qh-package/usr/libexec/quiethosts-helper" > build-metadata/helper-entitlements.plist
+          python3 scripts/validate.py --stage "$RUNNER_TEMP/qh-package" --scheme "$QH_SCHEME" | tee build-metadata/package.txt
+          ldid -e "$RUNNER_TEMP/qh-package/${prefix}Applications/QuietHosts.app/QuietHosts" > build-metadata/app-entitlements.plist
+          ldid -e "$RUNNER_TEMP/qh-package/${prefix}usr/libexec/quiethosts-helper" > build-metadata/helper-entitlements.plist
           python3 scripts/check_entitlements.py build-metadata/app-entitlements.plist App/Entitlements.plist
           python3 scripts/check_entitlements.py build-metadata/helper-entitlements.plist Helper/Entitlements.plist
           shasum -a 256 "$deb" > build-metadata/SHA256SUMS
@@ -65,7 +79,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: quiethosts-native-${{ github.run_id }}
+          name: quiethosts-native-${{ matrix.scheme }}-${{ github.run_id }}
           path: |
             packages/*.deb
             build-metadata/

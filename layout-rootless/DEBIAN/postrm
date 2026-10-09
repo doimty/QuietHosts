@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+case "${1:-}" in
+ remove|purge)
+  if command -v uicache >/dev/null 2>&1; then uicache -u /var/jb/Applications/QuietHosts.app; fi
+  ;;
+esac
+# Preserve root-owned backups and application data. No blind Hosts deletion.

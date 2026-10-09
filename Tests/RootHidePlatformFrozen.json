@@ -1,0 +1,12 @@
+{
+  "baseline": "cee42b76dd96c6699648dd67bdff68f07f708f54",
+  "files": {
+    "Helper/main.m": "f7c956262d37868fc3f710486872bc99b1ee717de742a6e3125d16cb1e9b0a7c",
+    "Helper/QHFileManager.m": "e1a6a1555b9420785f7facfb2c3ba0eb7514dbf7dfb19eeaf04a6394d9695d6e",
+    "Shared/QHBridge.m": "63ba2c5c8e96d8f5b7082011f0908e355548fce11d75349933f8d53221c4fff3",
+    "App/Makefile": "dabc3dd9ee51f9cc05c93c6ea9697e9ae014077f9ef3a215b3856fc38dfa1ac3",
+    "Helper/Makefile": "724fa731a58b60582976e28b96fbdadd6f2fac99564ce3b558d9d55f91ebb1c4",
+    "Makefile": "798b4046c7cd79b96ce96e47270f21eb82b1bcaa8779505c2617c3179d258311",
+    "ci/prepare.py": "57e93ed3ea991d7dc0b8e37538dab3791a1183196f65b5b4021aae61422064ce"
+  }
+}

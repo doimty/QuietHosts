@@ -1,5 +1,8 @@
 #import "QHFileManager.h"
 #include "QHDirectoryPolicy.h"
+#if defined(QH_ROOTLESS) && QH_ROOTLESS
+#import "QHRootlessPaths.h"
+#endif
 #import "../Shared/QHRuleEngine.h"
 #import <CommonCrypto/CommonDigest.h>
 #include <sys/stat.h>
@@ -546,6 +549,10 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
     return fd;
 }
 @interface QHTransaction : NSObject {
+#if defined(QH_ROOTLESS) && QH_ROOTLESS
+    QHRootlessRouting _rootlessRouting;
+    BOOL _rootlessRoutingOpen;
+#endif
     struct stat _rootAnchor, _etcAnchor, _rawAnchor, _privateAnchor, _varAnchor, _libAnchor, _stateAnchor;
     struct stat _varLinkAnchor, _pairParentAnchor, _pairRootAnchor, _pairLinkAnchor, _backlinkAnchor;
 }
@@ -595,6 +602,14 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
         if (!_rootPath.isAbsolutePath || !_systemPath.isAbsolutePath) {
             Fail(@"unsafe-directory");
         }
+#if defined(QH_ROOTLESS) && QH_ROOTLESS
+        _rootlessRouting.baseFD = -1;
+        if (pairedDataRoot) Fail(@"rootless-invalid-path");
+        const char *routingError = QHRootlessRoutingOpenRuntime(_rootPath, _systemPath, owner,
+                                                             &_rootlessRouting);
+        if (routingError) Fail([NSString stringWithUTF8String:routingError]);
+        _rootlessRoutingOpen = YES;
+#endif
         _rootFD = open(_rootPath.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
         _rootAnchor = CheckRoot(_rootFD, owner);
         _etcFD = openat(_rootFD, "etc", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
@@ -658,10 +673,22 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
                 stringByAppendingPathComponent:_rootPath.lastPathComponent];
             _pairedConfigured = YES;
         }
+#if defined(QH_ROOTLESS) && QH_ROOTLESS
+        const char *recheck = QHRootlessRoutingVerify(&_rootlessRouting);
+        if (recheck) Fail([NSString stringWithUTF8String:recheck]);
+        struct stat heldRoot, heldSystem;
+        if (fstat(_rootFD, &heldRoot) || fstat(_rawFD, &heldSystem) ||
+            !QHDirectoryAnchorMatches(&heldRoot, &_rootlessRouting.layout.root) ||
+            !QHDirectoryAnchorMatches(&heldSystem, &_rootlessRouting.layout.system))
+            Fail(@"rootless-directory-raced");
+#endif
     }
     return self;
 }
 - (void)dealloc {
+#if defined(QH_ROOTLESS) && QH_ROOTLESS
+    if (_rootlessRoutingOpen) QHRootlessRoutingClose(&_rootlessRouting);
+#endif
     int fds[] = {_lockFD, _stateFD, _libFD,      _varFD,        _privateFD,
                  _rawFD,  _etcFD,   _pairRootFD, _pairParentFD, _rootFD};
     for (NSUInteger i = 0; i < sizeof(fds) / sizeof(fds[0]); i++) {
@@ -890,6 +917,22 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
     }
 }
 - (void)anchors {
+#if defined(QH_ROOTLESS) && QH_ROOTLESS
+    if (!_rootlessRoutingOpen) Fail(@"rootless-routing-unavailable");
+    const char *routingError = QHRootlessRoutingVerify(&_rootlessRouting);
+    if (routingError) Fail([NSString stringWithUTF8String:routingError]);
+    /* Tie the transaction's held fds to the namespace proved before any write. */
+    int held[] = {_rootFD, _etcFD, _rawFD, _varFD, _libFD};
+    const struct stat *proved[] = {&_rootlessRouting.layout.root, &_rootlessRouting.layout.etc,
+                                   &_rootlessRouting.layout.system, &_rootlessRouting.layout.var,
+                                   &_rootlessRouting.layout.lib};
+    for (NSUInteger i = 0; i < 5; i++) {
+        if (held[i] < 0) continue;
+        struct stat st;
+        if (fstat(held[i], &st) || !QHDirectoryAnchorMatches(&st, proved[i]))
+            Fail(@"rootless-directory-raced");
+    }
+#endif
     int f = open(_rootPath.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     @try {
         struct stat a = CheckRoot(f, _owner), b = CheckRoot(_rootFD, _owner);

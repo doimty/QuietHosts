@@ -1,7 +1,7 @@
 #import "QHBridge.h"
 #import "QHProcess.h"
 #import "QHLocalization.h"
-#import <roothide.h>
+#import "QHPlatform.h"
 #include <errno.h>
 #include <stdlib.h>
 
@@ -27,7 +27,7 @@
                 } else {
                     size_t length = 0;
                     int status = -1;
-                    int error = QHRunProcess(jbroot("/usr/libexec/quiethosts-helper"), operation.UTF8String,
+                    int error = QHRunProcess(QH_PLATFORM_PATH("/usr/libexec/quiethosts-helper"), operation.UTF8String,
                                              input.bytes, input.length, output, 65536, &length, &status, 90);
                     if (!error) {
                         id response = [NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:output

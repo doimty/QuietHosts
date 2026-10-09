@@ -1,6 +1,7 @@
 """Native9 structure/routing/frozen-scope checks, not UIKit visual acceptance."""
 from pathlib import Path
 import hashlib, json, re
+from platform_freeze import project_frozen_text
 ROOT=Path(__file__).resolve().parents[1]
 
 def check(ui):
@@ -47,7 +48,8 @@ def main():
         else:raise AssertionError('UI mutation accepted: '+old)
     golden=json.loads((ROOT/'Tests/Native9Frozen.json').read_text())
     for name,digest in golden['files'].items():
-        assert hashlib.sha256((ROOT/name).read_bytes()).hexdigest()==digest, 'Frozen file changed: '+name
+        original=project_frozen_text((ROOT/name).read_bytes().decode(),name).encode()
+        assert hashlib.sha256(original).hexdigest()==digest, 'Frozen file changed: '+name
     # Native10's UI-only adapter maps back to the exact native9 UIKit type
     # names before comparing frozen business code. No handler text is removed.
     normalized=ui.replace('QHDialogController *','UIAlertController *').replace('[QHDialogController','[UIAlertController').replace('dialogControllerWithTitle:','alertControllerWithTitle:').replace('QHDialogAction *','UIAlertAction *').replace('[QHDialogAction','[UIAlertAction')

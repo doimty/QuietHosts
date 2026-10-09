@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+case "${1:-}" in
+ configure)
+  chown root:wheel /var/jb/usr/libexec/quiethosts-helper
+  chmod 4755 /var/jb/usr/libexec/quiethosts-helper
+  if command -v uicache >/dev/null 2>&1; then uicache -p /var/jb/Applications/QuietHosts.app; fi
+  ;;
+esac
+# Installation never applies a Hosts list or restarts DNS/SpringBoard.

@@ -1,7 +1,10 @@
 #import <Foundation/Foundation.h>
 #import "QHFileManager.h"
 #include "QHDNSReload.h"
-#import <roothide.h>
+#import "../Shared/QHPlatform.h"
+#if defined(QH_ROOTLESS) && QH_ROOTLESS
+#import "QHRootlessPaths.h"
+#endif
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <poll.h>
@@ -116,7 +119,7 @@ static NSDictionary *ReadRequest(BOOL optional, NSString **failure) {
 /* Fixed executable + fixed arguments + fixed environment only. There is no
  * general process runner here and no caller-supplied path/argument expansion. */
 static NSString *RestartDNS(QHDNSReloadResult *diagnostic) {
-    const char *mapped = jbroot("/usr/bin/killall");
+    const char *mapped = QH_PLATFORM_PATH("/usr/bin/killall");
     if (!mapped || mapped[0] != '/') {
         return @"reload-unavailable";
     }
@@ -202,6 +205,15 @@ int main(int argc, char *argv[]) {
             if (!request) {
                 return Emit(Failure(error ?: @"invalid-request"));
             }
+#if defined(QH_ROOTLESS) && QH_ROOTLESS
+            NSString *rootPath = nil, *systemHosts = nil;
+            NSString *pathError = QHRootlessResolvePaths(
+                [NSString stringWithUTF8String:QH_PLATFORM_PATH("/")], &rootPath, &systemHosts);
+            if (pathError) return Emit(Failure(pathError));
+            QHFileManager *manager = [[QHFileManager alloc] initWithRoot:rootPath
+                                                             systemHosts:systemHosts
+                                                           expectedOwner:0];
+#else
             const char *root = jbroot("/");
             if (!root || root[0] != '/') {
                 return Emit(Failure(@"root-unavailable"));
@@ -223,6 +235,7 @@ int main(int argc, char *argv[]) {
                                                              systemHosts:@"/etc/hosts"
                                                            expectedOwner:0
                                                           pairedDataRoot:pairedDataRoot];
+#endif
             NSMutableDictionary *result = [[manager handleCommand:command request:request] mutableCopy];
             BOOL changed = [result[@"changed"] boolValue];
             if (!status && (changed || ([result[@"ok"] boolValue] && [command isEqual:@"reload"]))) {
