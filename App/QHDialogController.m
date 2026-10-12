@@ -59,6 +59,12 @@ void QHConfigureModal(UIViewController *controller) {
 @property(nonatomic) BOOL resolvedCentered;
 @property(nonatomic) BOOL entranceAnimated;
 @end
+/* Forward declaration: QHCenteredActionButton runs before the @implementation
+ * and must be able to dispatch chooseAction: through the weak owner. */
+@interface QHDialogController (QHDialogActions)
+- (void)chooseAction:(QHDialogAction *)action;
+@end
+
 static BOOL QHCenteredConfirmationFor(UIAlertControllerStyle style, NSUInteger fields, NSUInteger actions,
                                       NSString *detail) {
     // Only genuinely short, simple alerts become centered cards. Chinese

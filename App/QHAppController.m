@@ -162,7 +162,6 @@ static BOOL Animate(void) {
     self.textView.delegate = self;
     [stack addArrangedSubview:self.textView];
     __weak typeof(self) weak = self;
-    __weak typeof(self) weak = self;
     [stack addArrangedSubview:Button(QHL(@"Preview"), YES, YES, ^{
                if (weak.submit) {
                    weak.submit(weak.textView.text);
