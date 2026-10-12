@@ -11,6 +11,8 @@ typedef void (^QHDialogHandler)(QHDialogAction *action);
 @interface QHDialogController : UINavigationController
 @property(nonatomic,readonly,copy) NSArray<UITextField *> *textFields;
 @property(nonatomic,readonly,copy) NSArray<QHDialogAction *> *actions;
+// Short alert confirmations render as a centered card, not a bottom sheet.
+@property(nonatomic,readonly) BOOL usesCenteredConfirmation;
 + (instancetype)dialogControllerWithTitle:(NSString *)title message:(nullable NSString *)message preferredStyle:(UIAlertControllerStyle)style;
 - (void)addAction:(QHDialogAction *)action;
 - (void)addTextFieldWithConfigurationHandler:(void (^)(UITextField *field))configuration;

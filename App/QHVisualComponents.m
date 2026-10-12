@@ -195,8 +195,11 @@ UIControl *QHVRow(NSString *title, NSString *subtitle, NSString *symbol, NSStrin
     control.enabled = enabled;
     control.layer.cornerRadius = 12;
     control.isAccessibilityElement = YES;
-    control.accessibilityLabel = title;
-    control.accessibilityHint = subtitle;
+    // The subtitle is descriptive content, not an action hint; VoiceOver must
+    // read it as part of the row instead of announcing it as "hint: ...".
+    control.accessibilityLabel = subtitle.length
+        ? [NSString stringWithFormat:@"%@ · %@", title, subtitle]
+        : title;
     control.accessibilityValue = value;
     control.accessibilityTraits = action ? UIAccessibilityTraitButton : UIAccessibilityTraitStaticText;
     if (!enabled) control.accessibilityTraits |= UIAccessibilityTraitNotEnabled;

@@ -12,11 +12,37 @@ def check(dialog,controller):
     assert 'sheet.prefersGrabberVisible=YES' in dialog
     assert 'sheet.preferredCornerRadius=28;' in dialog
     assert 'view.keyboardLayoutGuide.topAnchor' in dialog
-    assert 'UISheetPresentationControllerDetent.mediumDetent' in dialog
     assert 'sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;' in dialog
-    assert 'BOOL compact=self.dialogStyle==UIAlertControllerStyleAlert' in dialog
+    assert '- (BOOL)usesCenteredConfirmation' in dialog
+    assert 'UIModalPresentationOverFullScreen' in dialog
+    assert 'UIModalTransitionStyleCrossDissolve' in dialog
+    assert '[self buildCenteredConfirmation];' in dialog
+    assert 'self.centeredCard=card;' in dialog
+    assert '[self setNavigationBarHidden:YES animated:NO];' in dialog
+    assert 'holder.layer.cornerRadius=12;' in dialog
+    assert 'field.borderStyle=UITextBorderStyleNone' in dialog
+    assert 'UIButtonConfiguration.plainButtonConfiguration' in dialog
+    assert 'constant:22' not in controller, 'editor insets must match the shared 18pt rhythm'
+    assert 'UIFontTextStyleSubheadline' not in controller.split('static UIButton *Button(',1)[1].split('static NSString *Number(',1)[0]
+    assert 'initWithCustomView:Button(QHL(@"Cancel")' in controller
+    assert controller.index('sampleCard]') < controller.index('Button(button, YES, YES, ^{')
+    components=(ROOT/'App/QHVisualComponents.m').read_text()
+    row=components.split('UIControl *QHVRow(',1)[1].split('static UIView *VStat(',1)[0]
+    assert 'accessibilityHint' not in row, 'row subtitle must not be announced as a hint'
+    assert 'QHCenteredConfirmationFor(' in dialog
     assert 'NSCharacterSet.newlineCharacterSet' in dialog
-    assert '!UIContentSizeCategoryIsAccessibilityCategory' in dialog
+    handler=dialog.split('- (void)chooseAction:',1)[1].split('- (void)viewWillAppear:',1)[0]
+    for required in ('if (self.resolving', 'self.resolving=YES', 'self.view.userInteractionEnabled=NO',
+        'QHDialogController *keepAlive=self', 'completion:^{', 'if (action.handler) action.handler(action)', 'keepAlive.mutableActions=nil'):
+        assert required in handler, required
+    assert handler.index('dismissViewControllerAnimated') < handler.index('action.handler(action)')
+    assert 'UIAlertActionStyleCancel' in dialog and 'UIAlertActionStyleDestructive' in dialog
+    assert 'DColor(0xb42336,0xff8995)' in dialog
+    assert 'DColor(0xffffff,0x13131a)' in dialog
+    assert 'NSAssert(!self.contentBuilt' in dialog
+    assert '- (void)viewDidLoad' not in dialog
+    assert 'if (self.contentBuilt) return;' in dialog
+    assert 'readwrite' not in (ROOT/'App/QHDialogController.h').read_text()
     handler=dialog.split('- (void)chooseAction:',1)[1].split('- (void)viewWillAppear:',1)[0]
     for required in ('if (self.resolving', 'self.resolving=YES', 'self.view.userInteractionEnabled=NO',
         'QHDialogController *keepAlive=self', 'completion:^{', 'if (action.handler) action.handler(action)', 'keepAlive.mutableActions=nil'):
@@ -49,7 +75,7 @@ def check_icon(path,size):
 def main():
     dialog=(ROOT/'App/QHDialogController.m').read_text();controller=(ROOT/'App/QHAppController.m').read_text()
     check(dialog,controller)
-    for old,new in [('self.resolving=YES','self.resolving=NO'),('QHDialogController *keepAlive=self','QHDialogController *keepAlive=nil'),('controller.modalInPresentation=YES','controller.modalInPresentation=NO'),('sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;','sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierMedium;')]:
+    for old,new in [('self.resolving=YES','self.resolving=NO'),('QHDialogController *keepAlive=self','QHDialogController *keepAlive=nil'),('controller.modalInPresentation=YES','controller.modalInPresentation=NO'),('sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;','sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierMedium;'),('UIModalPresentationOverFullScreen','UIModalPresentationPageSheet'),('[self buildCenteredConfirmation];','')]:
         changed=dialog.replace(old,new);assert changed!=dialog
         try:check(changed,controller)
         except AssertionError:pass
@@ -62,7 +88,9 @@ def main():
         'software keyboard actually shown','UIContentSizeCategoryAccessibilityExtraExtraExtraLarge',
         'dialog-long-dark.png','new sheet presented after previous dismissed','real controller busy released after cancel/error',
         'real import and diagnostics open expanded without a swipe',
-        'full-screen capture completed before keyboard dismissal'):
+        'full-screen capture completed before keyboard dismissal',
+        'short confirmation uses the centered card','short confirmation is not a bottom sheet',
+        'cancel precedes confirm in one centered card','paired actions share one row'):
         assert required in smoke,required
     assert 'QHRunDialogSmoke(self.controller,' in (ROOT/'Tests/VisualSmoke.m').read_text()
     assert 'Tests/DialogSmoke.m' in (ROOT/'ci/visual_smoke.py').read_text()

@@ -48,6 +48,17 @@ static UIScrollView *DialogScroll(UIView *view) {
     NSString *target=(stage==0 || stage>=4) ? @"Cancel test" : @"Confirm test";
     UIControl *control=DialogControl(dialog.view,target);
     [self check:control!=nil name:@"real actionable control found"];
+    if(stage<=1) {
+        UIControl *cancel=DialogControl(dialog.view,@"Cancel test");
+        UIControl *confirm=DialogControl(dialog.view,@"Confirm test");
+        [self check:cancel && confirm name:@"paired actions are reachable controls"];
+        if(cancel && confirm) {
+            CGRect left=[cancel convertRect:cancel.bounds toView:dialog.view];
+            CGRect right=[confirm convertRect:confirm.bounds toView:dialog.view];
+            [self check:CGRectGetMidX(left)<CGRectGetMidX(right) name:@"cancel precedes confirm in one centered card"];
+            [self check:fabs(CGRectGetMidY(left)-CGRectGetMidY(right))<=1.0 name:@"paired actions share one row"];
+        }
+    }
     if(stage>=4) {
         UIScrollView *scroll=DialogScroll(dialog.topViewController.view);
         [self check:scroll.contentSize.height>scroll.bounds.size.height name:@"long diagnostics are scrollable"];
@@ -117,9 +128,14 @@ static UIScrollView *DialogScroll(UIView *view) {
     }]];
     [self.presenter presentViewController:dialog animated:NO completion:^{
         [self check:dialog.modalInPresentation name:@"explicit cancel required"];
-        [self check:dialog.sheetPresentationController.prefersGrabberVisible name:@"sheet chrome"];
-        NSString *openingHeight=stage>=2 ? UISheetPresentationControllerDetentIdentifierLarge : UISheetPresentationControllerDetentIdentifierMedium;
-        [self check:[dialog.sheetPresentationController.selectedDetentIdentifier isEqual:openingHeight] name:@"correct opening detent without manual dragging"];
+        if(stage<=1) {
+            [self check:dialog.usesCenteredConfirmation name:@"short confirmation uses the centered card"];
+            [self check:dialog.sheetPresentationController==nil name:@"short confirmation is not a bottom sheet"];
+            [self check:dialog.navigationBarHidden name:@"short confirmation hides navigation chrome"];
+        } else {
+            [self check:dialog.sheetPresentationController.prefersGrabberVisible name:@"sheet chrome"];
+            [self check:[dialog.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierLarge] name:@"correct opening detent without manual dragging"];
+        }
         [self check:self.confirmed+self.cancelled==stage name:@"presentation has no implicit action"];
         if(stage>=4) {
             dialog.overrideUserInterfaceStyle=stage==4 ? UIUserInterfaceStyleLight : UIUserInterfaceStyleDark;

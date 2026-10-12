@@ -57,10 +57,12 @@ static UIButton *Button(NSString *text, BOOL primary, BOOL enabled, void (^actio
     config.cornerStyle = UIButtonConfigurationCornerStyleLarge;
     config.baseBackgroundColor = Accent();
     config.baseForegroundColor = primary ? Color(0xffffff, 0x13131a) : Accent();
-    config.contentInsets = NSDirectionalEdgeInsetsMake(8, 12, 8, 12);
+    // Shared primary/secondary action spec: 46pt tall, body type, 12/16 insets
+    // — same rhythm as dialog buttons, so every primary action reads alike.
+    config.contentInsets = NSDirectionalEdgeInsetsMake(12, 16, 12, 16);
     config.titleTextAttributesTransformer = ^NSDictionary *(NSDictionary *input) {
         NSMutableDictionary *attributes = [input mutableCopy];
-        attributes[NSFontAttributeName] = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+        attributes[NSFontAttributeName] = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
         return attributes;
     };
     button.configuration = config;
@@ -68,7 +70,7 @@ static UIButton *Button(NSString *text, BOOL primary, BOOL enabled, void (^actio
     button.titleLabel.adjustsFontForContentSizeCategory = YES;
     button.enabled = enabled;
     button.accessibilityLabel = text;
-    [button.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
+    [button.heightAnchor constraintGreaterThanOrEqualToConstant:46].active = YES;
     [button addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
                 (void)a;
                 if (action) {
@@ -111,7 +113,7 @@ static BOOL Animate(void) {
                                                  constant:18],
         [self.stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor
                                                   constant:-18],
-        [self.stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:12],
+        [self.stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:16],
         [self.stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-20],
         [self.stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-36]
     ]];
@@ -160,27 +162,27 @@ static BOOL Animate(void) {
     self.textView.delegate = self;
     [stack addArrangedSubview:self.textView];
     __weak typeof(self) weak = self;
+    __weak typeof(self) weak = self;
     [stack addArrangedSubview:Button(QHL(@"Preview"), YES, YES, ^{
                if (weak.submit) {
                    weak.submit(weak.textView.text);
                }
            })];
-    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:QHL(@"Cancel")
-                                                                             style:UIBarButtonItemStylePlain
-                                                                            target:self
-                                                                            action:@selector(cancelTapped)];
+    // Same nav-bar cancel component as the preview page; system plain
+    // bar-button text used a different size and inset rhythm.
+    self.navigationItem.leftBarButtonItem =
+        [[UIBarButtonItem alloc] initWithCustomView:Button(QHL(@"Cancel"), NO, YES, ^{
+            if (weak.cancel) {
+                weak.cancel();
+            }
+        })];
     [NSLayoutConstraint activateConstraints:@[
         [stack.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:16],
-        [stack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:22],
-        [stack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-22],
+        [stack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:18],
+        [stack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-18],
         [stack.bottomAnchor constraintEqualToAnchor:self.view.keyboardLayoutGuide.topAnchor constant:-14],
         [self.textView.heightAnchor constraintGreaterThanOrEqualToConstant:100]
     ]];
-}
-- (void)cancelTapped {
-    if (self.cancel) {
-        self.cancel();
-    }
 }
 - (BOOL)textView:(UITextView *)textView
     shouldChangeTextInRange:(NSRange)range
@@ -769,10 +771,6 @@ static BOOL Animate(void) {
     [inputs addArrangedSubview:QHVFormRow(QHL(@"Unsupported rules"), Number([p[@"unsupported"] unsignedIntegerValue]))];
     [page.stack addArrangedSubview:inputs];
     [page.stack addArrangedSubview:QHVNote(QHL(@"Exact DOMAIN/HOST records are converted. Suffix, keyword, IP-range and URL rules are skipped."), @"info.circle")];
-    [page.stack addArrangedSubview:Button(button, YES, YES, ^{
-                    weakPage.view.userInteractionEnabled = NO;
-                    [weakNav dismissViewControllerAnimated:Animate() completion:confirm];
-                })];
     UIStackView *sampleCard = QHVCard();
     [sampleCard addArrangedSubview:QHVRow(QHL(@"Sample · first 50 merged domains at most"), nil,
         @"text.alignleft", nil, NO, YES, ^{
@@ -786,6 +784,12 @@ static BOOL Animate(void) {
             [weakNav pushViewController:samplePage animated:Animate()];
         })];
     [page.stack addArrangedSubview:sampleCard];
+    // The primary action closes the page: it belongs after the sample row, so
+    // a reader who scrolls to the end never scrolls past the confirm button.
+    [page.stack addArrangedSubview:Button(button, YES, YES, ^{
+                    weakPage.view.userInteractionEnabled = NO;
+                    [weakNav dismissViewControllerAnimated:Animate() completion:confirm];
+                })];
     [self.rootController presentViewController:nav animated:Animate() completion:nil];
 }
 - (void)candidateSources:(NSArray *)sources allowlist:(NSData *)allowlist title:(NSString *)title {
