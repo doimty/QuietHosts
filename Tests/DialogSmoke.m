@@ -121,6 +121,7 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
 @property(nonatomic) CGFloat maxHeight;
 @property(nonatomic) NSTimeInterval firstSampleDelay;
 @property(nonatomic) BOOL presentationCompleted;
+@property(nonatomic) BOOL appearanceSampled;
 @property(nonatomic) NSUInteger completedPresentationSamples;
 - (void)sampleCard:(UIView *)card background:(UIView *)background dialog:(QHDialogController *)dialog elapsed:(NSTimeInterval)elapsed;
 @end
@@ -180,6 +181,7 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
 @property(nonatomic) UIModalTransitionStyle lastStoredTransitionStyle;
 @property(nonatomic) NSUInteger presentationAssignments;
 @property(nonatomic) NSUInteger transitionAssignments;
+@property(nonatomic,copy) void (^configuredAppearanceSample)(QHDialogController *);
 @end
 @implementation QHDialogSetterSpy
 - (void)setModalPresentationStyle:(UIModalPresentationStyle)style {
@@ -189,6 +191,14 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
 - (void)setModalTransitionStyle:(UIModalTransitionStyle)style {
     self.lastStoredTransitionStyle=style;self.transitionAssignments++;
     [super setModalTransitionStyle:style];
+}
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    // Production builds the card in super. Observe its initial transform here,
+    // even when presentViewController returns before this lifecycle callback.
+    void (^sample)(QHDialogController *)=self.configuredAppearanceSample;
+    self.configuredAppearanceSample=nil;
+    if (sample) sample(self);
 }
 @end
 
@@ -296,6 +306,9 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
 - (void)sampleEntranceUntil:(NSTimeInterval)deadline record:(QHDialogMotionRecord *)record card:(UIView *)card background:(UIView *)background dialog:(QHDialogController *)dialog started:(NSTimeInterval)started completion:(void (^)(void))completion {
     // Observe the whole entrance, not only its completion. The deadline is a
     // safety cap, never a performance threshold or an assumed frame rate.
+    // presentViewController can return before viewWillAppear builds the card.
+    // Resolve it on every tick instead of holding an initial nil forever.
+    card=(UIView *)[dialog valueForKey:@"centeredCard"];
     [self sampleMotion:record card:card background:background dialog:dialog started:started];
     BOOL settled=record.presentationCompleted && record.completedPresentationSamples>=2;
     if (settled || [NSDate timeIntervalSinceReferenceDate]>=deadline) {
@@ -328,6 +341,7 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
     // A. No spring entrance: the card, its presentation layer and the dimming
     // background hold one geometry from the animated transition on. Alpha fades
     // of the cross dissolve are deliberately not inspected.
+    [self check:record.appearanceSampled name:@"configured appearance sampled before viewDidAppear"];
     [self check:record.modelSamples>0 && record.completedPresentationSamples>=2 name:@"entrance window observed both initial and displayed final state"];
     [self check:record.presentationSamples>=1 name:@"entrance window observed the card presentation layer"];
     [self check:record.maxModelScaleDeviation<=QHDialogScaleTolerance name:@"centered card model transform never scales on entrance"];
@@ -485,6 +499,14 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
     QHDialogMotionRecord *entrance=[QHDialogMotionRecord new];
     NSTimeInterval entranceStarted=[NSDate timeIntervalSinceReferenceDate];
     UIView *entranceBackground=dialog.view;
+    if(stage<=1) {
+        ((QHDialogSetterSpy *)dialog).configuredAppearanceSample=^(QHDialogController *appearing) {
+            UIView *card=(UIView *)[appearing valueForKey:@"centeredCard"];
+            [self check:[card isKindOfClass:UIView.class] name:@"centered card is reachable for KVC animation sampling"];
+            entrance.appearanceSampled=[card isKindOfClass:UIView.class];
+            [self sampleMotion:entrance card:card background:appearing.view dialog:appearing started:entranceStarted];
+        };
+    }
     NSLog(@"QH_DIALOG stage=%lu reduceMotion=%d animations=%d",(unsigned long)stage,UIAccessibilityIsReduceMotionEnabled(),[UIView areAnimationsEnabled]);
     [self.presenter presentViewController:dialog animated:stage<=1 completion:^{
         [self check:dialog.modalInPresentation name:@"explicit cancel required"];
@@ -559,12 +581,11 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
         });
     }];
     if(stage<=1) {
-        // Start synchronously while the presented transition is in flight.
-        // The old card already carries its 1.08 model transform here.
+        // UIKit may defer construction; the spy samples the true initial
+        // state in viewWillAppear and each tick re-resolves the card.
         UIView *card=(UIView *)[dialog valueForKey:@"centeredCard"];
-        [self check:[card isKindOfClass:UIView.class] name:@"centered card is reachable for KVC animation sampling"];
         [self sampleEntranceUntil:[NSDate timeIntervalSinceReferenceDate]+5.0 record:entrance card:card background:entranceBackground dialog:dialog started:entranceStarted completion:^{
-            [self checkEntranceRecord:entrance card:card dialog:dialog];
+            [self checkEntranceRecord:entrance card:(UIView *)[dialog valueForKey:@"centeredCard"] dialog:dialog];
             [self snapshot:dialog.view name:stage==0 ? @"dialog-message.png" : @"dialog-danger.png"];
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(.2*NSEC_PER_SEC)),dispatch_get_main_queue(),^{[self finishStage:dialog stage:stage];});
         }];

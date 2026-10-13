@@ -127,6 +127,10 @@ def main():
         'QHDialogInspectField(', '[window hitTest:', 'answers window hitTest at every valid text point',
         'focus switches to the URL field inside the same dialog', 'source name text survives the handler as its own value',
         'entrance.presentationCompleted=YES', 'completedPresentationSamples>=2',
+        'configuredAppearanceSample=^(QHDialogController *appearing)',
+        'configured appearance sampled before viewDidAppear',
+        'card=(UIView *)[dialog valueForKey:@"centeredCard"];',
+        'checkEntranceRecord:entrance card:(UIView *)[dialog valueForKey:@"centeredCard"]',
         'centered card model transform never scales on entrance',
         'centered card presentation layer never springs while dismissing'):
         assert required in smoke,required
