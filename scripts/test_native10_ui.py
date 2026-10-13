@@ -21,6 +21,22 @@ def check(dialog,controller):
     assert '[self setNavigationBarHidden:YES animated:NO];' in dialog
     assert 'holder.layer.cornerRadius=12;' in dialog
     assert 'field.borderStyle=UITextBorderStyleNone' in dialog
+    fields=dialog.split('for (UITextField *field in self.mutableFields)',1)[1].split('__weak typeof(self) weak=self;',1)[0]
+    assert 'field.translatesAutoresizingMaskIntoConstraints=NO;' in fields
+    assert fields.index('field.translatesAutoresizingMaskIntoConstraints=NO;') < fields.index('[holder addSubview:field];')
+    assert 'CGAffineTransformMakeScale' not in dialog and 'usingSpringWithDamping' not in dialog
+    assert '- (UIModalPresentationStyle)modalPresentationStyle' not in dialog, 'Use actual UIKit setter, not a dynamic getter'
+    assert '- (UIModalTransitionStyle)modalTransitionStyle' not in dialog
+    configure=dialog.split('void QHConfigureModal(',1)[1].split('@interface QHDialogAction',1)[0]
+    assert 'controller.modalPresentationStyle=centered ? UIModalPresentationOverFullScreen' in configure
+    assert 'controller.modalTransitionStyle=centered ? UIModalTransitionStyleCrossDissolve' in configure
+    assert 'if (!centered) {' in configure
+    assert configure.index('if (!centered) {') < configure.index('controller.sheetPresentationController')
+    actions=dialog.split('- (void)addAction:',1)[1].split('- (void)addTextFieldWithConfigurationHandler:',1)[0]
+    add_fields=dialog.split('- (void)addTextFieldWithConfigurationHandler:',1)[1].split('- (void)buildCenteredConfirmation',1)[0]
+    assert 'QHConfigureModal(self);' in actions and 'QHConfigureModal(self);' in add_fields
+    appearance=dialog.split('- (void)viewWillAppear:',1)[1]
+    assert 'QHConfigureModal(self)' not in appearance, 'Do not switch modal properties during entry'
     assert '[canvas addSubview:card];' in dialog
     assert '[root addSubview:scroll];' in dialog
     assert '[scroll addSubview:canvas];' in dialog
@@ -78,7 +94,19 @@ def check_icon(path,size):
 def main():
     dialog=(ROOT/'App/QHDialogController.m').read_text();controller=(ROOT/'App/QHAppController.m').read_text()
     check(dialog,controller)
-    for old,new in [('self.resolving=YES','self.resolving=NO'),('QHDialogController *keepAlive=self','QHDialogController *keepAlive=nil'),('controller.modalInPresentation=YES','controller.modalInPresentation=NO'),('sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;','sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierMedium;'),('UIModalPresentationOverFullScreen','UIModalPresentationPageSheet'),('[self buildCenteredConfirmation];','')]:
+    mutations=[('self.resolving=YES','self.resolving=NO'),
+        ('QHDialogController *keepAlive=self','QHDialogController *keepAlive=nil'),
+        ('controller.modalInPresentation=YES','controller.modalInPresentation=NO'),
+        ('sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;','sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierMedium;'),
+        ('UIModalPresentationOverFullScreen','UIModalPresentationPageSheet'),
+        ('[self buildCenteredConfirmation];',''),
+        ('field.translatesAutoresizingMaskIntoConstraints=NO;',''),
+        ('self.centeredCard=card;','self.centeredCard=card; card.transform=CGAffineTransformMakeScale(1.08,1.08);'),
+        ('QHConfigureModal(self);',''),
+        ('controller.modalPresentationStyle=centered ? UIModalPresentationOverFullScreen','controller.modalPresentationStyle=centered ? UIModalPresentationFormSheet'),
+        ('    if (!centered) {\n        UISheetPresentationController *sheet=', '    {\n        UISheetPresentationController *sheet='),
+        ('    [super viewWillAppear:animated];','    [super viewWillAppear:animated]; QHConfigureModal(self);')]
+    for old,new in mutations:
         changed=dialog.replace(old,new);assert changed!=dialog
         try:check(changed,controller)
         except AssertionError:pass
@@ -93,10 +121,19 @@ def main():
         'real import and diagnostics open expanded without a swipe',
         'full-screen capture completed before keyboard dismissal',
         'short confirmation uses the centered card','short confirmation is not a bottom sheet',
-        'cancel precedes confirm in one centered card','paired actions share one row'):
+        'cancel precedes confirm in one centered card','paired actions share one row',
+        'QHDialogSetterSpy dialogControllerWithTitle:', 'lastStoredPresentationStyle==expected',
+        'lastStoredTransitionStyle==transition', 'animated:stage<=1',
+        'QHDialogInspectField(', '[window hitTest:', 'answers window hitTest at every valid text point',
+        'focus switches to the URL field inside the same dialog', 'source name text survives the handler as its own value',
+        'entrance.presentationCompleted=YES', 'completedPresentationSamples>=2',
+        'centered card model transform never scales on entrance',
+        'centered card presentation layer never springs while dismissing'):
         assert required in smoke,required
     assert 'QHRunDialogSmoke(self.controller,' in (ROOT/'Tests/VisualSmoke.m').read_text()
-    assert 'Tests/DialogSmoke.m' in (ROOT/'ci/visual_smoke.py').read_text()
-    print('Native10 source: 7 unified dialog entries, preview/editor chrome, 4 rejected safety/height mutations and 3 opaque icon sizes PASS')
+    driver=(ROOT/'ci/visual_smoke.py').read_text()
+    assert 'Tests/DialogSmoke.m' in driver
+    assert "'-framework','QuartzCore'" in driver
+    print(f'Native10 source: 7 unified dialog entries, input hit-area/modal timing contracts, {len(mutations)} rejected mutations and 3 opaque icon sizes PASS')
     print('UIKit dismissal, input and keyboard runtime acceptance require macOS CI; not tested by this script.')
 if __name__=='__main__':main()

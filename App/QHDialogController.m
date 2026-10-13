@@ -8,20 +8,24 @@ static UIColor *DColor(unsigned light, unsigned dark) {
     }];
 }
 void QHConfigureModal(UIViewController *controller) {
-    // Centered confirmations get their own presentation; the generic chrome
-    // must not force them back into a bottom sheet.
-    if (![controller isKindOfClass:QHDialogController.class] ||
-        ![(QHDialogController *)controller usesCenteredConfirmation]) {
-        controller.modalPresentationStyle=UIModalPresentationFormSheet;
-    }
+    // Commit the actual UIKit properties while callers are still configuring
+    // actions/fields, before presentViewController starts its transition.
+    BOOL centered=[controller isKindOfClass:QHDialogController.class] &&
+                  [(QHDialogController *)controller usesCenteredConfirmation];
+    controller.modalPresentationStyle=centered ? UIModalPresentationOverFullScreen
+                                               : UIModalPresentationFormSheet;
+    controller.modalTransitionStyle=centered ? UIModalTransitionStyleCrossDissolve
+                                             : UIModalTransitionStyleCoverVertical;
     // Swipe cancellation must not skip a caller's finishBusy/consent logic.
     controller.modalInPresentation=YES;
-    UISheetPresentationController *sheet=controller.sheetPresentationController;
-    sheet.detents=@[UISheetPresentationControllerDetent.largeDetent];
-    sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;
-    sheet.prefersGrabberVisible=YES;
-    sheet.preferredCornerRadius=28;
-    sheet.prefersScrollingExpandsWhenScrolledToEdge=YES;
+    if (!centered) {
+        UISheetPresentationController *sheet=controller.sheetPresentationController;
+        sheet.detents=@[UISheetPresentationControllerDetent.largeDetent];
+        sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;
+        sheet.prefersGrabberVisible=YES;
+        sheet.preferredCornerRadius=28;
+        sheet.prefersScrollingExpandsWhenScrolledToEdge=YES;
+    }
     controller.view.tintColor=DColor(0x5b54e8,0x9b95ff);
     if ([controller isKindOfClass:UINavigationController.class]) {
         UINavigationController *nav=(UINavigationController *)controller;
@@ -57,7 +61,6 @@ void QHConfigureModal(UIViewController *controller) {
 @property(nonatomic) BOOL contentBuilt;
 @property(nonatomic,strong) UIStackView *centeredCard;
 @property(nonatomic) BOOL resolvedCentered;
-@property(nonatomic) BOOL entranceAnimated;
 @end
 /* Forward declaration: QHCenteredActionButton runs before the @implementation
  * and must be able to dispatch chooseAction: through the weak owner. */
@@ -119,19 +122,12 @@ static UIStackView *QHCenteredCard(void) {
     return QHCenteredConfirmationFor(self.dialogStyle, self.mutableFields.count,
                                      self.mutableActions.count, self.detail);
 }
-- (UIModalPresentationStyle)modalPresentationStyle {
-    return self.usesCenteredConfirmation ? UIModalPresentationOverFullScreen
-                                          : UIModalPresentationFormSheet;
-}
-- (UIModalTransitionStyle)modalTransitionStyle {
-    if (self.usesCenteredConfirmation) return UIModalTransitionStyleCrossDissolve;
-    return [super modalTransitionStyle];
-}
 - (NSArray<UITextField *> *)textFields { return [self.mutableFields copy]; }
 - (NSArray<QHDialogAction *> *)actions { return [self.mutableActions copy]; }
 - (void)addAction:(QHDialogAction *)action {
     NSAssert(!self.contentBuilt,@"Configure dialog actions before presentation");
     [self.mutableActions addObject:action];
+    QHConfigureModal(self);
 }
 - (void)addTextFieldWithConfigurationHandler:(void (^)(UITextField *))configuration {
     NSAssert(!self.contentBuilt,@"Configure dialog fields before presentation");
@@ -144,6 +140,7 @@ static UIStackView *QHCenteredCard(void) {
     field.clearButtonMode=UITextFieldViewModeWhileEditing;
     if (configuration) configuration(field);
     [self.mutableFields addObject:field];
+    QHConfigureModal(self);
 }
 - (void)buildCenteredConfirmation {
     [self setNavigationBarHidden:YES animated:NO];
@@ -201,22 +198,6 @@ static UIStackView *QHCenteredCard(void) {
         [card.widthAnchor constraintEqualToConstant:width]
     ]];
     self.centeredCard=card;
-    if (self.entranceAnimated && !UIAccessibilityIsReduceMotionEnabled()) {
-        card.transform=CGAffineTransformMakeScale(1.08,1.08);
-    }
-}
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    UIStackView *card=self.centeredCard;
-    if (!card) return;
-    if (self.entranceAnimated && !UIAccessibilityIsReduceMotionEnabled()) {
-        [UIView animateWithDuration:0.24 delay:0 usingSpringWithDamping:0.92 initialSpringVelocity:0.5
-                            options:UIViewAnimationOptionAllowUserInteraction animations:^{
-            card.transform=CGAffineTransformIdentity;
-        } completion:nil];
-    } else {
-        card.transform=CGAffineTransformIdentity;
-    }
 }
 - (void)chooseAction:(QHDialogAction *)action {
     if (self.resolving || ![self.mutableActions containsObject:action]) return;
@@ -233,16 +214,14 @@ static UIStackView *QHCenteredCard(void) {
 }
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    self.entranceAnimated=animated;
     if (self.contentBuilt) return;
     NSAssert(self.content && self.mutableActions && self.mutableFields,@"Dialog factory must configure content before first presentation");
-    // Freeze the centered decision before the presentation style is read, so
-    // a later nil-out of actions cannot flip the presentation mid-dismissal.
+    // Freeze the configured shape for the layout and dismissal; presentation
+    // properties were already committed by addAction/addTextField.
     self.resolvedCentered=QHCenteredConfirmationFor(self.dialogStyle, self.mutableFields.count,
                                                     self.mutableActions.count, self.detail);
     self.contentBuilt=YES;
     self.content.navigationItem.title=@""; // The card owns the single visible heading.
-    QHConfigureModal(self);
     if (self.usesCenteredConfirmation) {
         [self buildCenteredConfirmation];
         return;
@@ -287,6 +266,9 @@ static UIStackView *QHCenteredCard(void) {
             holder.layer.masksToBounds=YES;
             field.borderStyle=UITextBorderStyleNone;
             field.backgroundColor=UIColor.clearColor;
+            // The holder is only chrome; the field must own the entire hit
+            // area through these anchors, not its initial zero-sized frame.
+            field.translatesAutoresizingMaskIntoConstraints=NO;
             [holder addSubview:field];
             [NSLayoutConstraint activateConstraints:@[
                 [field.topAnchor constraintEqualToAnchor:holder.topAnchor],
