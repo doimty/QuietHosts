@@ -54,7 +54,11 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
                 return
     capture=threading.Thread(target=capture_keyboard,daemon=True);capture.start()
     try:
-        launch=subprocess.run(['xcrun','simctl','launch','--console',identifier,info['CFBundleIdentifier'],'-AppleLanguages','(zh-Hans)','-AppleLocale','zh_CN'],cwd=ROOT,capture_output=True,text=True,timeout=300)
+        # A cold simulator boot on a loaded runner has consumed 4-5 minutes
+        # before the app's first smoke log; the app-side flow itself needs
+        # another ~2 minutes. 300s killed healthy runs mid-dialog, so budget
+        # 600s here (the job cap is widened to match).
+        launch=subprocess.run(['xcrun','simctl','launch','--console',identifier,info['CFBundleIdentifier'],'-AppleLanguages','(zh-Hans)','-AppleLocale','zh_CN'],cwd=ROOT,capture_output=True,text=True,timeout=600)
     except subprocess.TimeoutExpired as error:
         def text(value):return value.decode(errors='replace') if isinstance(value,bytes) else (value or '')
         logs=text(error.stdout)+'\n'+text(error.stderr)
