@@ -172,6 +172,7 @@ static UIStackView *QHCenteredCard(void) {
     BOOL danger=NO;
     for (QHDialogAction *action in self.mutableActions) if (action.style==UIAlertActionStyleDestructive) danger=YES;
     UIStackView *card=QHCenteredCard();
+    [canvas addSubview:card];
     [card addArrangedSubview:QHVInfo(self.content.title,self.detail,danger ? @"exclamationmark.shield" : @"doc.text",nil)];
     QHDialogAction *cancel=nil,*primary=nil;
     for (QHDialogAction *action in self.mutableActions) {

@@ -21,6 +21,9 @@ def check(dialog,controller):
     assert '[self setNavigationBarHidden:YES animated:NO];' in dialog
     assert 'holder.layer.cornerRadius=12;' in dialog
     assert 'field.borderStyle=UITextBorderStyleNone' in dialog
+    assert '[canvas addSubview:card];' in dialog
+    assert '[root addSubview:scroll];' in dialog
+    assert '[scroll addSubview:canvas];' in dialog
     assert 'UIButtonConfiguration.plainButtonConfiguration' in dialog
     assert 'constant:22' not in controller, 'editor insets must match the shared 18pt rhythm'
     assert 'UIFontTextStyleSubheadline' not in controller.split('static UIButton *Button(',1)[1].split('static NSString *Number(',1)[0]
