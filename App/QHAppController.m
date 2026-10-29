@@ -10,30 +10,12 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <notify.h>
 
-static UIColor *Color(unsigned light, unsigned dark) {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-        unsigned rgb = traits.userInterfaceStyle == UIUserInterfaceStyleDark ? dark : light;
-        return [UIColor colorWithRed:((rgb >> 16) & 255) / 255.0
-                               green:((rgb >> 8) & 255) / 255.0
-                                blue:(rgb & 255) / 255.0
-                               alpha:1];
-    }];
-}
-static UIColor *Background(void) {
-    return Color(0xf3f2f8, 0x13131a);
-}
-static UIColor *CardBackground(void) {
-    return Color(0xffffff, 0x1d1d26);
-}
-static UIColor *Accent(void) {
-    return Color(0x5b54e8, 0x9b95ff);
-}
-static UIColor *TextPrimary(void) {
-    return Color(0x1b1b22, 0xf0eff8);
-}
-static UIColor *TextSecondary(void) {
-    return Color(0x686875, 0x9e9ea8);
-}
+// All pages, sheets and shared controls use the same semantic palette.
+static UIColor *Background(void) { return QHVBackgroundColor(); }
+static UIColor *CardBackground(void) { return QHVCardColor(); }
+static UIColor *Accent(void) { return QHVAccentColor(); }
+static UIColor *TextPrimary(void) { return QHVPrimaryTextColor(); }
+static UIColor *TextSecondary(void) { return QHVSecondaryTextColor(); }
 static UILabel *Label(NSString *text, UIFontTextStyle style, BOOL secondary) {
     UILabel *label = [UILabel new];
     label.text = text;
@@ -56,13 +38,14 @@ static UIButton *Button(NSString *text, BOOL primary, BOOL enabled, void (^actio
     config.title = text;
     config.cornerStyle = UIButtonConfigurationCornerStyleLarge;
     config.baseBackgroundColor = Accent();
-    config.baseForegroundColor = primary ? Color(0xffffff, 0x13131a) : Accent();
+    config.baseForegroundColor = primary ? QHVPrimaryForegroundColor() : Accent();
     // Shared primary/secondary action spec: 46pt tall, body type, 12/16 insets
     // — same rhythm as dialog buttons, so every primary action reads alike.
     config.contentInsets = NSDirectionalEdgeInsetsMake(12, 16, 12, 16);
     config.titleTextAttributesTransformer = ^NSDictionary *(NSDictionary *input) {
         NSMutableDictionary *attributes = [input mutableCopy];
-        attributes[NSFontAttributeName] = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+        attributes[NSFontAttributeName] = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody]
+            scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]];
         return attributes;
     };
     button.configuration = config;
@@ -89,33 +72,45 @@ static BOOL Animate(void) {
 
 @interface QHPage : UIViewController
 @property(nonatomic, strong) UIStackView *stack;
+@property(nonatomic, strong) UIScrollView *scrollView;
+@property(nonatomic) CGPoint rememberedOffset;
 @property(nonatomic, copy) void (^appeared)(void);
 - (void)clear;
+- (void)restoreScrollPosition;
 @end
 @implementation QHPage
 - (void)loadView {
     self.view = [UIView new];
     self.view.backgroundColor = Background();
     UIScrollView *scroll = [UIScrollView new];
+    self.scrollView = scroll;
     scroll.translatesAutoresizingMaskIntoConstraints = NO;
     scroll.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    scroll.alwaysBounceVertical = YES;
     [self.view addSubview:scroll];
     self.stack = Stack();
     self.stack.translatesAutoresizingMaskIntoConstraints = NO;
     self.stack.spacing = 14;
     [scroll addSubview:self.stack];
+    // Keep phone gutters and a readable, centered column on iPad. No fixed
+    // page/row height: accessibility sizes still have the whole scroll range.
+    NSLayoutConstraint *preferredWidth = [self.stack.widthAnchor
+        constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-36];
+    preferredWidth.priority = UILayoutPriorityDefaultHigh;
     [NSLayoutConstraint activateConstraints:@[
         [scroll.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [scroll.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
         [scroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [scroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor
-                                                 constant:18],
-        [self.stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor
-                                                  constant:-18],
+        [scroll.contentLayoutGuide.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor],
+        [self.stack.leadingAnchor constraintGreaterThanOrEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor constant:18],
+        [self.stack.trailingAnchor constraintLessThanOrEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor constant:-18],
+        [self.stack.centerXAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.centerXAnchor],
         [self.stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:16],
-        [self.stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-20],
-        [self.stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-36]
+        [self.stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-24],
+        [self.stack.widthAnchor constraintLessThanOrEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-36],
+        [self.stack.widthAnchor constraintLessThanOrEqualToConstant:680],
+        preferredWidth
     ]];
 }
 - (void)viewDidAppear:(BOOL)animated {
@@ -126,9 +121,21 @@ static BOOL Animate(void) {
 }
 - (void)clear {
     [self loadViewIfNeeded];
+    self.rememberedOffset = self.scrollView.contentOffset;
     for (UIView *view in self.stack.arrangedSubviews) {
         [view removeFromSuperview];
     }
+}
+- (void)restoreScrollPosition {
+    [self.view layoutIfNeeded];
+    UIScrollView *scroll = self.scrollView;
+    CGFloat top = -scroll.adjustedContentInset.top;
+    CGFloat bottom = MAX(top, scroll.contentSize.height - CGRectGetHeight(scroll.bounds)
+                             + scroll.adjustedContentInset.bottom);
+    CGPoint offset = self.rememberedOffset;
+    offset.y = MIN(MAX(offset.y, top), bottom);
+    offset.x = 0;
+    [scroll setContentOffset:offset animated:NO];
 }
 @end
 
@@ -225,6 +232,21 @@ static BOOL Animate(void) {
         _store = [QHStore new];
         _rootController = [UITabBarController new];
         _rootController.view.tintColor = Accent();
+        _draftTipDismissed = [NSUserDefaults.standardUserDefaults boolForKey:@"QHGuideDismissed"];
+        UITabBarAppearance *tabAppearance = [UITabBarAppearance new];
+        [tabAppearance configureWithOpaqueBackground];
+        tabAppearance.backgroundColor = CardBackground();
+        tabAppearance.shadowColor = QHVLineColor();
+        for (UITabBarItemAppearance *item in @[tabAppearance.stackedLayoutAppearance,
+                                               tabAppearance.inlineLayoutAppearance,
+                                               tabAppearance.compactInlineLayoutAppearance]) {
+            item.normal.iconColor = TextSecondary();
+            item.normal.titleTextAttributes = @{NSForegroundColorAttributeName:TextSecondary()};
+            item.selected.iconColor = Accent();
+            item.selected.titleTextAttributes = @{NSForegroundColorAttributeName:Accent()};
+        }
+        _rootController.tabBar.standardAppearance = tabAppearance;
+        _rootController.tabBar.scrollEdgeAppearance = tabAppearance;
         NSArray *titles = @[ QHL(@"QuietHosts"), QHL(@"Rules"), QHL(@"Settings") ];
         NSArray *tabs = @[ QHL(@"Home"), QHL(@"Rules"), QHL(@"Settings") ];
         NSArray *symbols = @[ @"house", @"line.3.horizontal.decrease.circle", @"slider.horizontal.3" ];
@@ -237,11 +259,22 @@ static BOOL Animate(void) {
                 [weak refreshStatus];
             };
             UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:page];
-            nav.navigationBar.prefersLargeTitles = NO;
+            nav.navigationBar.prefersLargeTitles = i != 0;
+            UINavigationBarAppearance *navigation = [UINavigationBarAppearance new];
+            [navigation configureWithOpaqueBackground];
+            navigation.backgroundColor = Background();
+            navigation.shadowColor = UIColor.clearColor;
+            navigation.titleTextAttributes = @{NSForegroundColorAttributeName:TextPrimary()};
+            navigation.largeTitleTextAttributes = @{NSForegroundColorAttributeName:TextPrimary()};
+            nav.navigationBar.standardAppearance = navigation;
+            nav.navigationBar.scrollEdgeAppearance = navigation;
+            nav.navigationBar.tintColor = Accent();
             [nav setNavigationBarHidden:(i == 0) animated:NO];
             nav.tabBarItem = [[UITabBarItem alloc] initWithTitle:tabs[i]
                                                            image:[UIImage systemImageNamed:symbols[i]]
                                                              tag:(NSInteger)i];
+            NSArray *selectedSymbols = @[@"house.fill", @"line.3.horizontal.decrease.circle.fill", @"slider.horizontal.3"];
+            nav.tabBarItem.selectedImage = [UIImage systemImageNamed:selectedSymbols[i]];
             [pages addObject:page];
             [controllers addObject:nav];
         }
@@ -372,7 +405,8 @@ static BOOL Animate(void) {
 }
 - (BOOL)hasOnlineSources {
     for (NSDictionary *source in self.draft.document[@"sources"]) {
-        if ([source[@"kind"] isEqual:@"url"] && [source[@"enabled"] boolValue]) return YES;
+        // Manual refresh already includes excluded URL snapshots as well.
+        if ([source[@"kind"] isEqual:@"url"]) return YES;
     }
     return NO;
 }
@@ -383,13 +417,13 @@ static BOOL Animate(void) {
     BOOL writable = [self statusWritable:self.status];
     BOOL active = writable && [self.status[@"state"] isEqual:@"active"];
     BOOL inactive = writable && [self.status[@"state"] isEqual:@"inactive"];
-    [home addArrangedSubview:QHVBrandHeader(QHL(@"QuietHosts"), self.shortState, active,
-                                           QHL(@"Local Hosts rules"))];
-    UIStackView *managed = QHVCard();
+    [home addArrangedSubview:QHVBrandHeader(QHL(@"QuietHosts"), QHL(@"On device"), NO,
+                                           QHL(@"Local Hosts manager"))];
     UISwitch *mainSwitch = [UISwitch new];
     mainSwitch.onTintColor = Accent();
     mainSwitch.on = active;
     mainSwitch.enabled = !self.busy && (active || inactive);
+    mainSwitch.accessibilityIdentifier = @"qh.managed.switch";
     mainSwitch.accessibilityLabel = QHL(@"Hosts rules");
     mainSwitch.accessibilityHint = QHL(@"Uses saved rules. Confirmation is required; the local draft is applied separately.");
     [mainSwitch addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
@@ -399,77 +433,92 @@ static BOOL Animate(void) {
         if (weak.busy || ![weak statusWritable:weak.status]) return;
         [weak prepareHelperCommand:requested ? @"enable" : @"disable"];
     }] forControlEvents:UIControlEventValueChanged];
-    [managed addArrangedSubview:QHVInfo(QHL(@"Hosts rules"), self.stateTitle, @"shield", mainSwitch)];
-    [managed addArrangedSubview:QHVSeparator()];
-    [managed addArrangedSubview:Label([self statusExplanation:self.status], UIFontTextStyleFootnote, YES)];
+    NSString *managedCount = nil;
     if (writable && [self.status[@"domainCount"] isKindOfClass:NSNumber.class] && (active || inactive)) {
-        NSString *format = active ? QHL(@"Rules in managed Hosts: %@ domains") : QHL(@"Saved rule set: %@ domains");
-        [managed addArrangedSubview:Label([NSString stringWithFormat:format,
-            Number([self.status[@"domainCount"] unsignedIntegerValue])], UIFontTextStyleSubheadline, NO)];
+        managedCount = Number([self.status[@"domainCount"] unsignedIntegerValue]);
     }
+    NSString *stateDetail = writable
+        ? QHL(@"Verified Hosts file only. DNS filtering and app caches are not tested.")
+        : [self statusExplanation:self.status];
+    UIStackView *managed = QHVStatusCard(self.stateTitle,
+        writable ? QHL(@"Verified file state") : self.shortState, stateDetail,
+        active ? QHL(@"Managed domains") : QHL(@"Saved domains"), managedCount,
+        mainSwitch, active, self.status != nil && !writable);
     [home addArrangedSubview:managed];
-    if (!self.draftTipDismissed) {
-        UIStackView *tip = QHVCard();
-        [tip addArrangedSubview:QHVNote(QHL(@"Draft is stored on this device. Apply it to update managed Hosts."), @"bolt")];
-        [tip addArrangedSubview:QHVRow(QHL(@"Hide this tip"), nil, @"xmark", nil, NO, YES, ^{
-            weak.draftTipDismissed = YES;
-            [weak render];
-        })];
-        [home addArrangedSubview:tip];
-    }
+
     if (self.storeError) {
         UIStackView *failure = QHVCard();
         [failure addArrangedSubview:QHVInfo(QHL(@"Local draft unavailable"), self.storeError.localizedDescription,
                                           @"exclamationmark.triangle", nil)];
-        [failure addArrangedSubview:QHVRow(QHL(@"Read local storage again"), nil, @"arrow.clockwise", nil,
-                                          NO, !self.busy, ^{ [weak start]; })];
+        [failure addArrangedSubview:QHVCommandRow(QHL(@"Read local storage again"), nil, @"arrow.clockwise", nil,
+                                                 NO, !self.busy, ^{ [weak start]; })];
         [home addArrangedSubview:failure];
     } else if (self.draft) {
         UIStackView *draftCard = QHVCard();
+        draftCard.accessibilityIdentifier = @"qh.draft.card";
         NSString *sourceSummary = [NSString stringWithFormat:QHL(@"%@ sources · %@ exact allowlist entries"),
             Number([self.draft.document[@"sources"] count]), Number(self.draft.allowlistCount)];
-        [draftCard addArrangedSubview:QHVRow(QHL(@"Draft"), sourceSummary, @"doc.text", nil, NO, YES, ^{
+        [draftCard addArrangedSubview:QHVRow(QHL(@"Your rule draft"), sourceSummary, @"square.stack.3d.up", nil, NO, YES, ^{
             weak.rootController.selectedIndex = 1;
         })];
-        [draftCard addArrangedSubview:QHVStats(QHL(@"Unique domains"), Number(self.draft.compiled.domains.count),
-            QHL(@"Merge duplicates"), Number([self.draft.compiled.statistics[@"duplicates"] unsignedIntegerValue]))];
-        [draftCard addArrangedSubview:QHVSeparator()];
-        BOOL same = [self.appliedLocalRevision isEqual:self.draft.document[@"revision"]] &&
-                    [self.appliedHelperRevision isEqual:self.status[@"revision"]] && active;
-        [draftCard addArrangedSubview:Label(same ? QHL(@"This draft was confirmed applied in this session.") :
-            QHL(@"Draft changes are not applied automatically."), UIFontTextStyleFootnote, YES)];
+        UIView *stats = QHVStats(QHL(@"Draft domains"), Number(self.draft.compiled.domains.count),
+            QHL(@"Duplicates removed"), Number([self.draft.compiled.statistics[@"duplicates"] unsignedIntegerValue]));
+        stats.accessibilityIdentifier = @"qh.draft.stats";
+        [draftCard addArrangedSubview:stats];
         [draftCard addArrangedSubview:QHVFormRow(QHL(@"Generated file size"),
             [NSByteCountFormatter stringFromByteCount:(int64_t)self.draft.compiled.hostsData.length
                                            countStyle:NSByteCountFormatterCountStyleFile])];
+        [draftCard addArrangedSubview:QHVSeparator()];
+        // Counts alone cannot prove equality. Keep the existing revision proof.
+        BOOL same = [self.appliedLocalRevision isEqual:self.draft.document[@"revision"]] &&
+                    [self.appliedHelperRevision isEqual:self.status[@"revision"]] && active;
+        [draftCard addArrangedSubview:Label(same ? QHL(@"This draft was confirmed applied in this session.") :
+            QHL(@"Preview before applying. Saved Hosts stay unchanged until you confirm."), UIFontTextStyleFootnote, YES)];
+        BOOL firstSource = [self.draft.document[@"sources"] count] == 0 && !active && !inactive;
+        UIButton *apply = Button(firstSource ? QHL(@"Add your first source") : QHL(@"Preview and apply"),
+            YES, !self.busy, ^{
+                if (firstSource) [weak chooseImport:NO];
+                else [weak prepareApply];
+            });
+        apply.accessibilityIdentifier = @"qh.draft.apply";
+        [draftCard addArrangedSubview:apply];
         [home addArrangedSubview:draftCard];
+        if (!self.draftTipDismissed && [self.draft.document[@"sources"] count] == 0) {
+            UIStackView *tip = QHVCard();
+            [tip addArrangedSubview:QHVInfo(QHL(@"Start in three steps"),
+                QHL(@"Import a source you trust, review the merged rules, then explicitly apply. Nothing is applied during installation."),
+                @"sparkles", nil)];
+            [tip addArrangedSubview:QHVCommandRow(QHL(@"Hide this tip"), nil, @"xmark", nil, NO, YES, ^{
+                weak.draftTipDismissed = YES;
+                [NSUserDefaults.standardUserDefaults setBool:YES forKey:@"QHGuideDismissed"];
+                [weak render];
+            })];
+            [home addArrangedSubview:tip];
+        }
     }
-    [home addArrangedSubview:Button(QHL(@"Apply draft"), YES, !self.busy && self.draft != nil, ^{
-        [weak prepareApply];
-    })];
-    [home addArrangedSubview:QHVSection(QHL(@"Actions"))];
+    [home addArrangedSubview:QHVSection(QHL(@"Quick actions"))];
     UIStackView *actions = QHVCard();
     if (self.download) {
-        [actions addArrangedSubview:QHVRow(QHL(@"Cancel download"), nil, @"xmark.circle", nil, NO, YES, ^{
-            [weak.download cancel];
-        })];
+        [actions addArrangedSubview:QHVCommandRow(QHL(@"Cancel download"), QHL(@"Saved source snapshots are kept."),
+            @"xmark.circle", nil, NO, YES, ^{ [weak.download cancel]; })];
         [actions addArrangedSubview:QHVSeparator()];
     } else if ([self hasOnlineSources]) {
-        [actions addArrangedSubview:QHVRow(QHL(@"Update online sources"), QHL(@"Manual refresh; failed updates keep existing snapshots."),
+        [actions addArrangedSubview:QHVCommandRow(QHL(@"Update online sources"),
+            QHL(@"All online sources, including excluded ones. Updates change the draft only."),
             @"arrow.clockwise", nil, NO, !self.busy, ^{ [weak refreshSources]; })];
         [actions addArrangedSubview:QHVSeparator()];
     }
-    [actions addArrangedSubview:QHVRow(QHL(@"Refresh file status"), QHL(@"Verify managed Hosts and helper state."),
+    [actions addArrangedSubview:QHVCommandRow(QHL(@"Refresh file status"), QHL(@"Verify managed Hosts and helper state."),
         @"checkmark.shield", nil, NO, !self.busy, ^{ [weak refreshStatus]; })];
     [actions addArrangedSubview:QHVSeparator()];
     [actions addArrangedSubview:QHVRow(QHL(@"Advanced information"), QHL(@"Dependencies, diagnostics and backup state."),
         @"info.circle", nil, NO, !self.busy, ^{ [weak showDiagnostics:YES]; })];
     [home addArrangedSubview:actions];
-    [home addArrangedSubview:Label(self.busy ? QHL(@"Working…") :
-        QHL(@"Online sources update only when requested. Reimport files or pasted text to refresh them."),
-        UIFontTextStyleFootnote, YES)];
+    if (self.busy) [home addArrangedSubview:Label(QHL(@"Working…"), UIFontTextStyleFootnote, YES)];
     [self renderRules];
     [self renderSettings];
     [self renderSourceDetail];
+    for (QHPage *page in self.pages) [page restoreScrollPosition];
 }
 - (NSString *)sourceKind:(NSDictionary *)source {
     return [source[@"kind"] isEqual:@"url"] ? QHL(@"HTTPS source · manual refresh") :
@@ -481,6 +530,7 @@ static BOOL Animate(void) {
     QHPage *page = [QHPage new];
     self.sourceDetailPage = page;
     [self renderSourceDetail];
+    page.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
     [self.pages[1].navigationController pushViewController:page animated:Animate()];
 }
 - (void)renderSourceDetail {
@@ -524,13 +574,23 @@ static BOOL Animate(void) {
     [page.stack addArrangedSubview:summary];
     [page.stack addArrangedSubview:QHVNote(QHL(@"Exact DOMAIN/HOST records are converted. Suffix, keyword, IP-range and URL rules are skipped."), @"info.circle")];
     UIStackView *remove = QHVCard();
-    [remove addArrangedSubview:QHVRow(QHL(@"Remove from local draft"), QHL(@"Existing managed Hosts remain unchanged until Apply."),
+    [remove addArrangedSubview:QHVCommandRow(QHL(@"Remove from local draft"), QHL(@"Existing managed Hosts remain unchanged until Apply."),
         @"trash", nil, YES, !self.busy, ^{ [weak removeSource:identifier]; })];
     [page.stack addArrangedSubview:remove];
+    [page restoreScrollPosition];
 }
 - (void)renderRules {
     UIStackView *rules = self.pages[1].stack;
     __weak typeof(self) weak = self;
+    if (self.draft) {
+        UIStackView *library = QHVCard();
+        [library addArrangedSubview:QHVInfo(QHL(@"Your rule library"),
+            [NSString stringWithFormat:QHL(@"%@ sources · %@ draft domains"),
+                Number([self.draft.document[@"sources"] count]), Number(self.draft.compiled.domains.count)],
+            @"square.stack.3d.up", nil)];
+        [library addArrangedSubview:Label(QHL(@"Edit locally. Preview and apply when you are ready."), UIFontTextStyleFootnote, YES)];
+        [rules addArrangedSubview:library];
+    }
     [rules addArrangedSubview:QHVSection(QHL(@"Rule sources"))];
     if (!self.draft) {
         [rules addArrangedSubview:QHVNote(QHL(@"Local storage must load successfully before you can change rules."), @"exclamationmark.triangle")];
@@ -600,6 +660,21 @@ static BOOL Animate(void) {
         CGRectGetMidY(self.pages[2].view.bounds), 1, 1);
     [self.presenter presentViewController:alert animated:Animate() completion:nil];
 }
+- (void)showUsageGuide {
+    [self message:QHL(@"Using QuietHosts")
+           detail:QHL(@"1. Import a source you trust from HTTPS, a file, or pasted text. Exact Hosts, DOMAIN and HOST rules are supported.\n\n2. Review the merged preview, skipped entries and exact allowlist. Saving only changes your local draft.\n\n3. On Home, choose Preview and apply, then confirm. The helper validates the destination and backs up a verified baseline. Pause restores that baseline; your local sources are kept.\n\nAn enabled state verifies the Hosts file, not all traffic or app DNS caches. No background refresh or scheduled download is performed.")];
+}
+- (void)showPrivacyDetails {
+    [self message:QHL(@"Privacy and local data")
+           detail:QHL(@"Source snapshots, URLs and the exact allowlist are stored locally in QuietHosts. The app has no telemetry or scheduled refresh.\n\nA manual HTTPS source download contacts the server you choose. That server can see ordinary connection metadata, such as your IP address. Source URLs are not sent to the helper.\n\nBackup and restore concern only the helper's verified Hosts baseline. Your local source document is not a system backup.\n\nWhen sharing a diagnostic report, remove source URLs and personal information. Opening the project page uses your browser and does not automatically submit a report.")];
+}
+- (void)openProjectSupport {
+    NSURL *url = [NSURL URLWithString:@"https://github.com/doimty/QuietHosts/issues"];
+    __weak typeof(self) weak = self;
+    [UIApplication.sharedApplication openURL:url options:@{} completionHandler:^(BOOL success) {
+        if (!success) [weak message:QHL(@"Project and support") detail:QHL(@"Could not open the project page. Please try again later.")];
+    }];
+}
 - (void)renderSettings {
     UIStackView *settings = self.pages[2].stack;
     __weak typeof(self) weak = self;
@@ -611,34 +686,48 @@ static BOOL Animate(void) {
     [settings addArrangedSubview:appearance];
     [settings addArrangedSubview:QHVSection(QHL(@"Rules and files"))];
     UIStackView *data = QHVCard();
-    [data addArrangedSubview:QHVRow(QHL(@"Update online sources"), QHL(@"Manual refresh; failed updates keep existing snapshots."),
+    [data addArrangedSubview:QHVCommandRow(QHL(@"Update online sources"),
+        QHL(@"All online sources, including excluded ones. Updates change the draft only."),
         @"arrow.clockwise", nil, NO, !self.busy && [self hasOnlineSources], ^{ [weak refreshSources]; })];
     [data addArrangedSubview:QHVSeparator()];
-    [data addArrangedSubview:QHVRow(QHL(@"Refresh file status"), QHL(@"Verify managed Hosts and helper state."),
+    [data addArrangedSubview:QHVCommandRow(QHL(@"Refresh file status"), QHL(@"Verify managed Hosts and helper state."),
         @"checkmark.shield", nil, NO, !self.busy, ^{ [weak refreshStatus]; })];
     [data addArrangedSubview:QHVSeparator()];
     [data addArrangedSubview:QHVRow(QHL(@"Backup and restore"), QHL(@"Review the helper's retained baseline."),
         @"externaldrive", nil, NO, !self.busy, ^{ [weak showDiagnostics:NO]; })];
     [data addArrangedSubview:QHVSeparator()];
-    [data addArrangedSubview:QHVRow(QHL(@"Retry DNS reload"), QHL(@"Request a DNS service restart without changing Hosts."),
+    [data addArrangedSubview:QHVCommandRow(QHL(@"Retry DNS reload"), QHL(@"Request a DNS service restart without changing Hosts."),
         @"arrow.triangle.2.circlepath", nil, NO, !self.busy && [self statusWritable:self.status], ^{ [weak retryReload]; })];
     [data addArrangedSubview:QHVSeparator()];
     [data addArrangedSubview:QHVRow(QHL(@"Advanced information"), QHL(@"Dependencies, diagnostics and backup state."),
         @"info.circle", nil, NO, !self.busy, ^{ [weak showDiagnostics:YES]; })];
     [settings addArrangedSubview:data];
     if ([self statusWritable:self.status] && [self.status[@"state"] isEqual:@"active"]) {
+        [settings addArrangedSubview:QHVSection(QHL(@"Rule control"))];
         UIStackView *restore = QHVCard();
-        [restore addArrangedSubview:QHVRow(QHL(@"Pause rules and restore original Hosts"),
+        [restore addArrangedSubview:QHVCommandRow(QHL(@"Pause rules and restore original Hosts"),
             QHL(@"Keeps local sources; restores only the verified baseline."), @"trash", nil, YES, !self.busy, ^{
                 [weak prepareHelperCommand:@"disable"];
             })];
         [settings addArrangedSubview:restore];
     } else if ([self statusWritable:self.status] && [self.status[@"state"] isEqual:@"inactive"]) {
+        [settings addArrangedSubview:QHVSection(QHL(@"Rule control"))];
         UIStackView *resume = QHVCard();
-        [resume addArrangedSubview:QHVRow(QHL(@"Resume saved rules"), QHL(@"This does not apply local draft changes."),
+        [resume addArrangedSubview:QHVCommandRow(QHL(@"Resume saved rules"), QHL(@"This does not apply local draft changes."),
             @"play.circle", nil, NO, !self.busy, ^{ [weak prepareHelperCommand:@"enable"]; })];
         [settings addArrangedSubview:resume];
     }
+    [settings addArrangedSubview:QHVSection(QHL(@"Help and privacy"))];
+    UIStackView *help = QHVCard();
+    [help addArrangedSubview:QHVRow(QHL(@"Using QuietHosts"), QHL(@"Import, review, apply. Restore when needed."),
+        @"book.closed", nil, NO, !self.busy, ^{ [weak showUsageGuide]; })];
+    [help addArrangedSubview:QHVSeparator()];
+    [help addArrangedSubview:QHVRow(QHL(@"Privacy and local data"), QHL(@"Understand what stays on this device."),
+        @"hand.raised", nil, NO, !self.busy, ^{ [weak showPrivacyDetails]; })];
+    [help addArrangedSubview:QHVSeparator()];
+    [help addArrangedSubview:QHVRow(QHL(@"Project and support"), QHL(@"Opens GitHub. No report is sent automatically."),
+        @"bubble.left.and.bubble.right", nil, NO, !self.busy, ^{ [weak openProjectSupport]; })];
+    [settings addArrangedSubview:help];
     [settings addArrangedSubview:QHVSection(QHL(@"About"))];
     UIStackView *about = QHVCard();
     NSBundle *bundle = NSBundle.mainBundle;

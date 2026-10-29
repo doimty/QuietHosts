@@ -1,10 +1,10 @@
 Package: com.doimty.quiethosts
 Name: QuietHosts
-Version: 0.1.0-1+native16
+Version: 0.1.0-1+native17
 Architecture: iphoneos-arm64e
 Description: Native Hosts source manager with checked file transactions.
 Maintainer: doimty
 Author: doimty
-Section: Utilities
+Section: Applications
 Depends: firmware (>= 15.0), com.ps.letmeblock, com.opa334.libsandy, uikittools
 Conflicts: com.0xkuj.ccadsbegone, com.0xkuj.ccadsbegone.roothide

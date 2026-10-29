@@ -77,5 +77,9 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
     assert launch.returncode==0 and report['failures']==0 and report['writes']==0,report
     assert not capture_errors and (OUT/'visual-software-keyboard-screen.png').is_file(), ('Complete keyboard screenshot missing',capture_errors)
     assert report['checks']>100 and report['dialog_checks']>=90 and report['mock_status_requests']>0,report
+    assert report['downloads']==0, 'UI fixtures must never make network downloads'
+    assert report['component_fixtures']==18 and report['controller_cases']==108, report
+    assert report['controller_live_transitions']==18 and report['native_switch_checks']>=270, report
+    assert report['consent_cancellations']==5 and report['screenshots']==10, report
     assert 'Unable to simultaneously satisfy constraints' not in logs, 'UIKit constraint conflict'
     print('UIKit simulator smoke PASS:',report)

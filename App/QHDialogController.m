@@ -1,12 +1,6 @@
 #import "QHDialogController.h"
 #import "QHVisualComponents.h"
 
-static UIColor *DColor(unsigned light, unsigned dark) {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *trait) {
-        unsigned rgb=trait.userInterfaceStyle==UIUserInterfaceStyleDark ? dark : light;
-        return [UIColor colorWithRed:((rgb>>16)&255)/255.0 green:((rgb>>8)&255)/255.0 blue:(rgb&255)/255.0 alpha:1];
-    }];
-}
 void QHConfigureModal(UIViewController *controller) {
     // Commit the actual UIKit properties while callers are still configuring
     // actions/fields, before presentViewController starts its transition.
@@ -26,15 +20,15 @@ void QHConfigureModal(UIViewController *controller) {
         sheet.preferredCornerRadius=28;
         sheet.prefersScrollingExpandsWhenScrolledToEdge=YES;
     }
-    controller.view.tintColor=DColor(0x5b54e8,0x9b95ff);
+    controller.view.tintColor=QHVAccentColor();
     if ([controller isKindOfClass:UINavigationController.class]) {
         UINavigationController *nav=(UINavigationController *)controller;
         nav.navigationBar.prefersLargeTitles=NO;
         UINavigationBarAppearance *appearance=[UINavigationBarAppearance new];
         [appearance configureWithOpaqueBackground];
-        appearance.backgroundColor=DColor(0xf3f2f8,0x13131a);
+        appearance.backgroundColor=QHVBackgroundColor();
         appearance.shadowColor=UIColor.clearColor;
-        appearance.titleTextAttributes=@{NSForegroundColorAttributeName:DColor(0x1b1b22,0xf0eff8)};
+        appearance.titleTextAttributes=@{NSForegroundColorAttributeName:QHVPrimaryTextColor()};
         nav.navigationBar.standardAppearance=appearance;
         nav.navigationBar.scrollEdgeAppearance=appearance;
     }
@@ -82,14 +76,20 @@ static UIButton *QHCenteredActionButton(QHDialogAction *action, BOOL primary, QH
     UIButtonConfiguration *configuration=UIButtonConfiguration.filledButtonConfiguration;
     configuration.title=action.title;
     if (primary) {
-        configuration.baseBackgroundColor=action.style==UIAlertActionStyleDestructive ? DColor(0xb42336,0xff8995) : DColor(0x5b54e8,0x9b95ff);
-        configuration.baseForegroundColor=DColor(0xffffff,0x13131a);
+        configuration.baseBackgroundColor=action.style==UIAlertActionStyleDestructive ? QHVDestructiveColor() : QHVAccentColor();
+        configuration.baseForegroundColor=QHVPrimaryForegroundColor();
     } else {
-        configuration.baseBackgroundColor=DColor(0xe9e7f6,0x2c2c3a);
-        configuration.baseForegroundColor=DColor(0x5b54e8,0x9b95ff);
+        configuration.baseBackgroundColor=QHVInnerColor();
+        configuration.baseForegroundColor=QHVAccentColor();
     }
     configuration.cornerStyle=UIButtonConfigurationCornerStyleLarge;
     configuration.contentInsets=NSDirectionalEdgeInsetsMake(12,16,12,16);
+    configuration.titleTextAttributesTransformer=^NSDictionary *(NSDictionary *input) {
+        NSMutableDictionary *attributes=[input mutableCopy];
+        attributes[NSFontAttributeName]=[[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody]
+            scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]];
+        return attributes;
+    };
     button.configuration=configuration;
     button.titleLabel.numberOfLines=0;
     button.titleLabel.adjustsFontForContentSizeCategory=YES;
@@ -135,8 +135,8 @@ static UIStackView *QHCenteredCard(void) {
     field.font=[UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     field.adjustsFontForContentSizeCategory=YES;
     field.borderStyle=UITextBorderStyleRoundedRect;
-    field.textColor=DColor(0x1b1b22,0xf0eff8);
-    field.backgroundColor=DColor(0xfaf9fe,0x242430);
+    field.textColor=QHVPrimaryTextColor();
+    field.backgroundColor=QHVInnerColor();
     field.clearButtonMode=UITextFieldViewModeWhileEditing;
     if (configuration) configuration(field);
     [self.mutableFields addObject:field];
@@ -227,7 +227,7 @@ static UIStackView *QHCenteredCard(void) {
         return;
     }
     UIView *view=self.content.view;
-    view.backgroundColor=DColor(0xf3f2f8,0x13131a);
+    view.backgroundColor=QHVBackgroundColor();
     UIScrollView *scroll=[UIScrollView new];
     scroll.translatesAutoresizingMaskIntoConstraints=NO;
     scroll.keyboardDismissMode=UIScrollViewKeyboardDismissModeInteractive;
@@ -255,7 +255,7 @@ static UIStackView *QHCenteredCard(void) {
         for (UITextField *field in self.mutableFields) {
             UILabel *label=[UILabel new];label.text=field.accessibilityLabel ?: field.placeholder;
             label.numberOfLines=0;label.font=[UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
-            label.adjustsFontForContentSizeCategory=YES;label.textColor=DColor(0x686875,0x9e9ea8);
+            label.adjustsFontForContentSizeCategory=YES;label.textColor=QHVSecondaryTextColor();
             // Rounded input container: the system rounded-rect border radius is
             // too small next to the 22pt cards. The field itself stays
             // transparent so the holder owns the corner and color.
@@ -282,6 +282,7 @@ static UIStackView *QHCenteredCard(void) {
         [stack addArrangedSubview:inputs];
     }
     __weak typeof(self) weak=self;
+    UIStackView *choices=nil;
     for (QHDialogAction *action in self.mutableActions) {
         if (action.style==UIAlertActionStyleCancel && self.mutableActions.count>1) {
             // Same plain spec as the app-wide secondary Button: accent text,
@@ -291,7 +292,7 @@ static UIStackView *QHCenteredCard(void) {
             UIButtonConfiguration *configuration=UIButtonConfiguration.plainButtonConfiguration;
             configuration.title=action.title;
             configuration.cornerStyle=UIButtonConfigurationCornerStyleLarge;
-            configuration.baseForegroundColor=DColor(0x5b54e8,0x9b95ff);
+            configuration.baseForegroundColor=QHVAccentColor();
             configuration.contentInsets=NSDirectionalEdgeInsetsMake(8,12,8,12);
             configuration.titleTextAttributesTransformer=^NSDictionary *(NSDictionary *input){
                 NSMutableDictionary *attributes=[input mutableCopy];
@@ -309,18 +310,28 @@ static UIStackView *QHCenteredCard(void) {
             }] forControlEvents:UIControlEventTouchUpInside];
             self.content.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithCustomView:close];
         } else if (self.dialogStyle==UIAlertControllerStyleActionSheet) {
-            UIStackView *choice=QHVCard();
-            [choice addArrangedSubview:QHVRow(action.title,nil,action.style==UIAlertActionStyleDestructive ? @"trash" : @"chevron.right",nil,
+            if (!choices) {
+                choices=QHVCard();
+                choices.accessibilityIdentifier=@"qh.dialog.choices";
+                [stack addArrangedSubview:choices];
+            }
+            if (choices.arrangedSubviews.count) [choices addArrangedSubview:QHVSeparator()];
+            [choices addArrangedSubview:QHVRow(action.title,nil,action.style==UIAlertActionStyleDestructive ? @"trash" : @"circle",nil,
                 action.style==UIAlertActionStyleDestructive,YES,^{ [weak chooseAction:action]; })];
-            [stack addArrangedSubview:choice];
         } else {
             UIButton *button=[UIButton buttonWithType:UIButtonTypeSystem];
             UIButtonConfiguration *configuration=UIButtonConfiguration.filledButtonConfiguration;
             configuration.title=action.title;
-            configuration.baseBackgroundColor=action.style==UIAlertActionStyleDestructive ? DColor(0xb42336,0xff8995) : DColor(0x5b54e8,0x9b95ff);
-            configuration.baseForegroundColor=DColor(0xffffff,0x13131a);
+            configuration.baseBackgroundColor=action.style==UIAlertActionStyleDestructive ? QHVDestructiveColor() : QHVAccentColor();
+            configuration.baseForegroundColor=QHVPrimaryForegroundColor();
             configuration.cornerStyle=UIButtonConfigurationCornerStyleLarge;
             configuration.contentInsets=NSDirectionalEdgeInsetsMake(12,16,12,16);
+    configuration.titleTextAttributesTransformer=^NSDictionary *(NSDictionary *input) {
+        NSMutableDictionary *attributes=[input mutableCopy];
+        attributes[NSFontAttributeName]=[[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody]
+            scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]];
+        return attributes;
+    };
             button.configuration=configuration;
             button.titleLabel.numberOfLines=0;button.titleLabel.adjustsFontForContentSizeCategory=YES;
             button.accessibilityLabel=action.title;

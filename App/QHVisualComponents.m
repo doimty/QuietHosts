@@ -8,17 +8,37 @@ static UIColor *VColor(unsigned light, unsigned dark) {
                                 blue:(rgb & 255) / 255.0 alpha:1];
     }];
 }
-static UIColor *VCard(void) { return VColor(0xffffff, 0x1d1d26); }
-static UIColor *VInner(void) { return VColor(0xfaf9fe, 0x242430); }
-static UIColor *VTile(void) { return VColor(0xedebfa, 0x2b2944); }
-static UIColor *VAccent(void) { return VColor(0x5b54e8, 0x9b95ff); }
-static UIColor *VText(void) { return VColor(0x1b1b22, 0xf0eff8); }
-static UIColor *VSecondary(void) { return VColor(0x686875, 0x9e9ea8); }
-static UIColor *VLine(void) { return VColor(0xecebf4, 0x2c2c38); }
-static UIColor *VDanger(void) { return VColor(0xb42336, 0xff8995); }
-static UIColor *VDangerBackground(void) { return VColor(0xfff0f2, 0x3c232b); }
-static UIColor *VGood(void) { return VColor(0x1b7352, 0x8cddb7); }
-static UIColor *VGoodBackground(void) { return VColor(0xe3f2ea, 0x203c32); }
+UIColor *QHVBackgroundColor(void) { return VColor(0xf4f3f8, 0x121218); }
+UIColor *QHVCardColor(void) { return VColor(0xffffff, 0x1c1c24); }
+UIColor *QHVInnerColor(void) { return VColor(0xf5f3fb, 0x252430); }
+UIColor *QHVAccentColor(void) { return VColor(0x5644cc, 0xaba0ff); }
+UIColor *QHVPrimaryTextColor(void) { return VColor(0x211d30, 0xf4f2fa); }
+UIColor *QHVSecondaryTextColor(void) { return VColor(0x645f70, 0xaea8bb); }
+UIColor *QHVLineColor(void) { return VColor(0xe2deed, 0x35323f); }
+UIColor *QHVDestructiveColor(void) { return VColor(0xae243e, 0xff929f); }
+UIColor *QHVPrimaryForegroundColor(void) { return VColor(0xffffff, 0x171322); }
+static UIColor *VTile(void) { return VColor(0xede8fb, 0x332d4d); }
+static UIColor *VHero(void) { return VColor(0xeeebfb, 0x252139); }
+static UIColor *VDangerBackground(void) { return VColor(0xffedf1, 0x402630); }
+static UIColor *VGood(void) { return VColor(0x246449, 0x93dcba); }
+static UIColor *VGoodBackground(void) { return VColor(0xe4f1e9, 0x223b31); }
+static UIColor *VAttention(void) { return VColor(0x875018, 0xefc083); }
+static UIColor *VAttentionBackground(void) { return VColor(0xf7ecdb, 0x423324); }
+static UIColor *VBorder(void) {
+    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+        if (traits.accessibilityContrast == UIAccessibilityContrastHigh) {
+            return [VColor(0xb7afcc, 0x756b8b) resolvedColorWithTraitCollection:traits];
+        }
+        return [QHVLineColor() resolvedColorWithTraitCollection:traits];
+    }];
+}
+static UIColor *VShadow(void) {
+    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
+            ? [UIColor colorWithWhite:0 alpha:0.22]
+            : [UIColor colorWithRed:0.12 green:0.08 blue:0.25 alpha:0.10];
+    }];
+}
 
 static UILabel *VLabel(NSString *text, UIFontTextStyle style, BOOL secondary) {
     UILabel *label = [UILabel new];
@@ -26,17 +46,95 @@ static UILabel *VLabel(NSString *text, UIFontTextStyle style, BOOL secondary) {
     label.font = [UIFont preferredFontForTextStyle:style];
     label.adjustsFontForContentSizeCategory = YES;
     label.numberOfLines = 0;
-    label.textColor = secondary ? VSecondary() : VText();
+    label.textColor = secondary ? QHVSecondaryTextColor() : QHVPrimaryTextColor();
     [label setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh
                                           forAxis:UILayoutConstraintAxisVertical];
+    return label;
+}
+static UILabel *VTypeLabel(NSString *text, UIFontTextStyle style, CGFloat size,
+                           UIFontWeight weight, BOOL secondary) {
+    UILabel *label = VLabel(text, style, secondary);
+    label.font = [[UIFontMetrics metricsForTextStyle:style]
+        scaledFontForFont:[UIFont systemFontOfSize:size weight:weight]];
     return label;
 }
 static UIStackView *VStack(void) {
     UIStackView *stack = [UIStackView new];
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 6;
+    stack.spacing = 4;
     return stack;
 }
+
+// Layer CGColors cannot inherit UIColor's dynamic provider. Resolve them again
+// for the actual view traits, including increased contrast and window changes.
+typedef NS_ENUM(NSUInteger, QHVSurfaceStyle) {
+    QHVSurfaceStyleCard,
+    QHVSurfaceStyleInset,
+    QHVSurfaceStyleHero
+};
+@interface QHVSurfaceStack : UIStackView
+@property(nonatomic) QHVSurfaceStyle surfaceStyle;
+- (void)updateChrome;
+@end
+@implementation QHVSurfaceStack {
+    CGRect _shadowBounds;
+    CGFloat _shadowCorner;
+    BOOL _hasShadowPath;
+}
+- (instancetype)initWithFrame:(CGRect)frame {
+    if ((self = [super initWithFrame:frame])) {
+        self.axis = UILayoutConstraintAxisVertical;
+        self.spacing = 8;
+        self.layoutMarginsRelativeArrangement = YES;
+        self.layoutMargins = UIEdgeInsetsMake(16, 16, 16, 16);
+        self.layer.cornerRadius = 20;
+        [self updateChrome];
+    }
+    return self;
+}
+- (void)setSurfaceStyle:(QHVSurfaceStyle)surfaceStyle {
+    _surfaceStyle = surfaceStyle;
+    [self updateChrome];
+}
+- (void)updateChrome {
+    self.backgroundColor = self.surfaceStyle == QHVSurfaceStyleHero ? VHero() :
+        self.surfaceStyle == QHVSurfaceStyleInset ? QHVInnerColor() : QHVCardColor();
+    CGFloat scale = self.window ? self.window.screen.scale : UIScreen.mainScreen.scale;
+    self.layer.borderWidth = self.traitCollection.accessibilityContrast == UIAccessibilityContrastHigh
+        ? 1.0 : 1.0 / MAX(scale, 1.0);
+    self.layer.borderColor = [VBorder() resolvedColorWithTraitCollection:self.traitCollection].CGColor;
+    self.layer.shadowColor = [VShadow() resolvedColorWithTraitCollection:self.traitCollection].CGColor;
+    self.layer.shadowOpacity = self.surfaceStyle == QHVSurfaceStyleInset ? 0 : 0.5;
+    self.layer.shadowRadius = 10;
+    self.layer.shadowOffset = CGSizeMake(0, 3);
+}
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    if (!previousTraitCollection ||
+        [self.traitCollection hasDifferentColorAppearanceComparedToTraitCollection:previousTraitCollection] ||
+        self.traitCollection.accessibilityContrast != previousTraitCollection.accessibilityContrast ||
+        self.traitCollection.displayScale != previousTraitCollection.displayScale) {
+        [self updateChrome];
+    }
+}
+- (void)didMoveToWindow {
+    [super didMoveToWindow];
+    [self updateChrome];
+}
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    // A known rounded path avoids repeatedly rasterizing every child for a
+    // shadow. Do not rasterize text or introduce implicit appearance animation.
+    if (!_hasShadowPath || !CGRectEqualToRect(_shadowBounds, self.bounds) ||
+        _shadowCorner != self.layer.cornerRadius) {
+        _shadowBounds = self.bounds;
+        _shadowCorner = self.layer.cornerRadius;
+        self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.bounds
+                                                        cornerRadius:_shadowCorner].CGPath;
+        _hasShadowPath = YES;
+    }
+}
+@end
 
 // Reflow follows the real available width and the current Dynamic Type scale.
 // Auxiliary sizes use a single column; no fixed row or page height is imposed.
@@ -88,7 +186,7 @@ static QHVFlexibleStack *VFlow(CGFloat threshold) {
     stack.baseWidth = threshold;
     stack.axis = UILayoutConstraintAxisHorizontal;
     stack.alignment = UIStackViewAlignmentCenter;
-    stack.spacing = 12;
+    stack.spacing = 10;
     return stack;
 }
 static void VPin(UIView *container, UIView *content, CGFloat inset) {
@@ -102,22 +200,18 @@ static void VPin(UIView *container, UIView *content, CGFloat inset) {
     ]];
 }
 UIStackView *QHVCard(void) {
-    UIStackView *card = VStack();
-    card.spacing = 10;
-    card.backgroundColor = VCard();
-    card.layer.cornerRadius = 22;
-    card.layoutMargins = UIEdgeInsetsMake(16, 16, 16, 16);
-    card.layoutMarginsRelativeArrangement = YES;
-    return card;
+    return [QHVSurfaceStack new];
 }
-UIView *QHVIconTile(NSString *symbol, BOOL large, BOOL danger) {
+static UIView *VIconTile(NSString *symbol, BOOL large, UIColor *foreground, UIColor *background) {
     UIView *tile = [UIView new];
-    CGFloat side = large ? 58 : 38;
-    tile.backgroundColor = danger ? VDangerBackground() : VTile();
-    tile.layer.cornerRadius = large ? 29 : 12;
+    CGFloat side = large ? 48 : 32;
+    tile.backgroundColor = background;
+    tile.layer.cornerRadius = large ? 16 : 10;
     tile.isAccessibilityElement = NO;
-    UIImageView *image = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:symbol]];
-    image.tintColor = danger ? VDanger() : VAccent();
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration
+        configurationWithPointSize:large ? 25 : 17 weight:UIImageSymbolWeightMedium];
+    UIImageView *image = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:symbol withConfiguration:configuration]];
+    image.tintColor = foreground;
     image.contentMode = UIViewContentModeScaleAspectFit;
     image.isAccessibilityElement = NO;
     image.translatesAutoresizingMaskIntoConstraints = NO;
@@ -125,57 +219,128 @@ UIView *QHVIconTile(NSString *symbol, BOOL large, BOOL danger) {
     [NSLayoutConstraint activateConstraints:@[
         [tile.widthAnchor constraintEqualToConstant:side],
         [tile.heightAnchor constraintEqualToConstant:side],
-        [image.widthAnchor constraintEqualToConstant:large ? 28 : 20],
-        [image.heightAnchor constraintEqualToConstant:large ? 28 : 20],
+        [image.widthAnchor constraintEqualToConstant:large ? 26 : 18],
+        [image.heightAnchor constraintEqualToConstant:large ? 26 : 18],
         [image.centerXAnchor constraintEqualToAnchor:tile.centerXAnchor],
         [image.centerYAnchor constraintEqualToAnchor:tile.centerYAnchor]
     ]];
     return tile;
 }
-UIView *QHVBadge(NSString *text, BOOL positive) {
+UIView *QHVIconTile(NSString *symbol, BOOL large, BOOL danger) {
+    return VIconTile(symbol, large, danger ? QHVDestructiveColor() : QHVAccentColor(),
+                     danger ? VDangerBackground() : VTile());
+}
+static UIView *VBadge(NSString *text, UIColor *foreground, UIColor *background) {
     UIStackView *badge = VStack();
-    badge.alignment = UIStackViewAlignmentCenter;
+    // Fill binds the background to the label's natural width plus margins.
+    // Soft hugging permits long localized values to wrap instead of adding a
+    // required badge-width equality that can destabilize live category reflow.
+    badge.alignment = UIStackViewAlignmentFill;
     badge.layoutMarginsRelativeArrangement = YES;
-    badge.layoutMargins = UIEdgeInsetsMake(4, 10, 4, 10);
-    badge.layer.cornerRadius = 14;
-    badge.backgroundColor = positive ? VGoodBackground() : VInner();
-    UILabel *label = VLabel(text, UIFontTextStyleCaption1, YES);
-    label.textColor = positive ? VGood() : VSecondary();
+    badge.layoutMargins = UIEdgeInsetsMake(4, 9, 4, 9);
+    badge.layer.cornerRadius = 10;
+    badge.backgroundColor = background;
+    UILabel *label = VTypeLabel(text, UIFontTextStyleCaption1, 12, UIFontWeightMedium, YES);
+    label.textColor = foreground;
     label.textAlignment = NSTextAlignmentCenter;
+    [label setContentHuggingPriority:UILayoutPriorityDefaultHigh + 1 forAxis:UILayoutConstraintAxisHorizontal];
+    [label setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh + 1 forAxis:UILayoutConstraintAxisHorizontal];
     [badge addArrangedSubview:label];
-    [badge setContentHuggingPriority:UILayoutPriorityDefaultHigh forAxis:UILayoutConstraintAxisHorizontal];
+    [badge setContentHuggingPriority:UILayoutPriorityDefaultHigh + 1 forAxis:UILayoutConstraintAxisHorizontal];
+    [badge setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh + 1 forAxis:UILayoutConstraintAxisHorizontal];
     return badge;
 }
+UIView *QHVBadge(NSString *text, BOOL positive) {
+    return VBadge(text, positive ? VGood() : QHVSecondaryTextColor(),
+                   positive ? VGoodBackground() : QHVInnerColor());
+}
+static void VNativeSwitchSize(UISwitch *toggle) {
+    [toggle setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [toggle setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [toggle setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisVertical];
+    [toggle setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisVertical];
+}
 UIView *QHVBrandHeader(NSString *title, NSString *state, BOOL positive, NSString *subtitle) {
-    UIStackView *card = QHVCard();
-    card.layer.cornerRadius = 26;
-    card.layoutMargins = UIEdgeInsetsMake(20, 20, 20, 20);
-    QHVFlexibleStack *header = VFlow(260);
+    QHVFlexibleStack *masthead = VFlow(300);
+    masthead.accessibilityIdentifier = @"qh.brand.header";
+    masthead.layoutMarginsRelativeArrangement = YES;
+    masthead.layoutMargins = UIEdgeInsetsMake(2, 2, 2, 2);
     UIStackView *text = VStack();
-    UILabel *brand = VLabel(title, UIFontTextStyleTitle1, NO);
-    brand.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleTitle1]
-        scaledFontForFont:[UIFont systemFontOfSize:30 weight:UIFontWeightBold]];
+    UILabel *brand = VTypeLabel(title, UIFontTextStyleTitle1, 27, UIFontWeightBold, NO);
+    brand.textColor = QHVAccentColor();
+    brand.accessibilityTraits |= UIAccessibilityTraitHeader;
     [text addArrangedSubview:brand];
-    QHVFlexibleStack *status = VFlow(180);
-    [status addArrangedSubview:QHVBadge(state, positive)];
-    [status addArrangedSubview:VLabel(subtitle, UIFontTextStyleSubheadline, YES)];
-    [text addArrangedSubview:status];
+    if (subtitle.length) [text addArrangedSubview:VTypeLabel(subtitle, UIFontTextStyleSubheadline, 14, UIFontWeightRegular, YES)];
+    [masthead addArrangedSubview:text];
+    [text.widthAnchor constraintLessThanOrEqualToAnchor:masthead.layoutMarginsGuide.widthAnchor].active = YES;
+    if (state.length) [masthead addArrangedSubview:QHVBadge(state, positive)];
+    return masthead;
+}
+UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
+                         NSString *countTitle, NSString *countValue, UISwitch *toggle,
+                         BOOL active, BOOL attention) {
+    QHVSurfaceStack *card = (QHVSurfaceStack *)QHVCard();
+    card.surfaceStyle = QHVSurfaceStyleHero;
+    card.accessibilityIdentifier = @"qh.managed.card";
+    QHVFlexibleStack *header = VFlow(280);
+    [header addArrangedSubview:VIconTile(attention ? @"exclamationmark.shield" : @"shield", YES,
+        attention ? VAttention() : QHVAccentColor(), attention ? VAttentionBackground() : VTile())];
+    UIStackView *text = VStack();
+    if (state.length) {
+        UIStackView *badgeLine = [UIStackView new];
+        badgeLine.axis = UILayoutConstraintAxisHorizontal;
+        badgeLine.alignment = UIStackViewAlignmentLeading;
+        UIView *badge = attention ? VBadge(state, VAttention(), VAttentionBackground()) : QHVBadge(state, active);
+        [badgeLine addArrangedSubview:badge];
+        [badgeLine addArrangedSubview:[UIView new]];
+        [text addArrangedSubview:badgeLine];
+    }
+    UILabel *heading = VTypeLabel(title, UIFontTextStyleTitle2, 22, UIFontWeightSemibold, NO);
+    heading.accessibilityTraits |= UIAccessibilityTraitHeader;
+    [text addArrangedSubview:heading];
     [header addArrangedSubview:text];
-    [header addArrangedSubview:QHVIconTile(@"shield", YES, NO)];
+    [text.widthAnchor constraintLessThanOrEqualToAnchor:header.widthAnchor].active = YES;
+    if (toggle) {
+        // Never assign on/enabled/accessibility state here. The controller owns
+        // confirmed file state and consent; this is the original native control.
+        toggle.onTintColor = QHVAccentColor();
+        VNativeSwitchSize(toggle);
+        [header addArrangedSubview:toggle];
+    }
     [card addArrangedSubview:header];
+    if (countValue != nil) {
+        UIView *count = QHVFormRow(countTitle, countValue);
+        count.accessibilityIdentifier = @"qh.managed.count";
+        [card addArrangedSubview:count];
+    }
+    if (detail.length) {
+        [card addArrangedSubview:QHVSeparator()];
+        [card addArrangedSubview:VTypeLabel(detail, UIFontTextStyleFootnote, 13, UIFontWeightRegular, YES)];
+    }
     return card;
 }
 static QHVFlexibleStack *VInfo(NSString *title, NSString *subtitle, NSString *symbol, UIView *trailing, BOOL danger) {
-    QHVFlexibleStack *row = VFlow(280);
+    QHVFlexibleStack *row = VFlow(250);
     [row addArrangedSubview:QHVIconTile(symbol, NO, danger)];
     UIStackView *text = VStack();
-    UILabel *heading = VLabel(title, UIFontTextStyleHeadline, NO);
-    if (danger) heading.textColor = VDanger();
-    if ([symbol isEqual:@"plus"]) heading.textColor = VAccent();
+    text.spacing = 3;
+    UILabel *heading = VTypeLabel(title, UIFontTextStyleBody, 16, UIFontWeightSemibold, NO);
+    if (danger) heading.textColor = QHVDestructiveColor();
+    if ([symbol isEqual:@"plus"]) heading.textColor = QHVAccentColor();
     [text addArrangedSubview:heading];
-    if (subtitle.length) [text addArrangedSubview:VLabel(subtitle, UIFontTextStyleFootnote, YES)];
+    if (subtitle.length) [text addArrangedSubview:VTypeLabel(subtitle, UIFontTextStyleFootnote, 13, UIFontWeightRegular, YES)];
+    [text setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
     [row addArrangedSubview:text];
-    if (trailing) [row addArrangedSubview:trailing];
+    [text.widthAnchor constraintLessThanOrEqualToAnchor:row.widthAnchor].active = YES;
+    if (trailing) {
+        if ([trailing isKindOfClass:UISwitch.class]) {
+            VNativeSwitchSize((UISwitch *)trailing);
+        } else {
+            [trailing setContentHuggingPriority:UILayoutPriorityDefaultHigh forAxis:UILayoutConstraintAxisHorizontal];
+            [trailing setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh forAxis:UILayoutConstraintAxisHorizontal];
+        }
+        [row addArrangedSubview:trailing];
+    }
     return row;
 }
 UIView *QHVInfo(NSString *title, NSString *subtitle, NSString *symbol, UIView *trailing) {
@@ -184,19 +349,29 @@ UIView *QHVInfo(NSString *title, NSString *subtitle, NSString *symbol, UIView *t
 @interface QHVActionRow : UIControl
 @end
 @implementation QHVActionRow
+- (void)setEnabled:(BOOL)enabled {
+    [super setEnabled:enabled];
+    self.alpha = enabled ? 1.0 : 0.55;
+    if (enabled) self.accessibilityTraits &= ~UIAccessibilityTraitNotEnabled;
+    else self.accessibilityTraits |= UIAccessibilityTraitNotEnabled;
+}
 - (void)setHighlighted:(BOOL)highlighted {
     [super setHighlighted:highlighted];
-    self.backgroundColor = highlighted ? VInner() : UIColor.clearColor;
+    self.backgroundColor = highlighted && self.enabled ? QHVInnerColor() : UIColor.clearColor;
+}
+- (BOOL)accessibilityActivate {
+    if (!self.enabled || !(self.allControlEvents & UIControlEventTouchUpInside)) return NO;
+    [self sendActionsForControlEvents:UIControlEventTouchUpInside];
+    return YES;
 }
 @end
-UIControl *QHVRow(NSString *title, NSString *subtitle, NSString *symbol, NSString *value,
-                  BOOL danger, BOOL enabled, void (^action)(void)) {
+static UIControl *VActionRow(NSString *title, NSString *subtitle, NSString *symbol, NSString *value,
+                            BOOL danger, BOOL enabled, void (^action)(void), BOOL disclosure) {
     QHVActionRow *control = [QHVActionRow new];
     control.enabled = enabled;
     control.layer.cornerRadius = 12;
     control.isAccessibilityElement = YES;
-    // The subtitle is descriptive content, not an action hint; VoiceOver must
-    // read it as part of the row instead of announcing it as "hint: ...".
+    // Descriptive content belongs to the label, not an optional VoiceOver hint.
     control.accessibilityLabel = subtitle.length
         ? [NSString stringWithFormat:@"%@ · %@", title, subtitle]
         : title;
@@ -206,21 +381,22 @@ UIControl *QHVRow(NSString *title, NSString *subtitle, NSString *symbol, NSStrin
     UIStackView *trailing = [UIStackView new];
     trailing.axis = UILayoutConstraintAxisHorizontal;
     trailing.alignment = UIStackViewAlignmentCenter;
-    trailing.spacing = 6;
+    trailing.spacing = 7;
     if (value.length) [trailing addArrangedSubview:QHVBadge(value, NO)];
-    if (action) {
+    if (action && disclosure) {
         UIImageView *chevron = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.right"]];
         chevron.contentMode = UIViewContentModeScaleAspectFit;
-        chevron.tintColor = VSecondary();
+        chevron.tintColor = QHVSecondaryTextColor();
         chevron.isAccessibilityElement = NO;
-        [chevron.widthAnchor constraintEqualToConstant:12].active = YES;
-        [chevron.heightAnchor constraintEqualToConstant:16].active = YES;
+        [chevron.widthAnchor constraintEqualToConstant:10].active = YES;
+        [chevron.heightAnchor constraintEqualToConstant:14].active = YES;
         [trailing addArrangedSubview:chevron];
     }
     QHVFlexibleStack *content = VInfo(title, subtitle, symbol, trailing.arrangedSubviews.count ? trailing : nil, danger);
     content.layoutMarginsRelativeArrangement = YES;
     content.layoutMargins = UIEdgeInsetsMake(8, 0, 8, 0);
-    // A single accessible control owns this row, including its value capsule.
+    // A single accessible control owns the text and capsule. The native switch
+    // is used only in QHVInfo/StatusCard and must never live under this hiding.
     content.accessibilityElementsHidden = YES;
     content.userInteractionEnabled = NO;
     VPin(control, content, 0);
@@ -233,17 +409,26 @@ UIControl *QHVRow(NSString *title, NSString *subtitle, NSString *symbol, NSStrin
     }
     return control;
 }
+UIControl *QHVRow(NSString *title, NSString *subtitle, NSString *symbol, NSString *value,
+                  BOOL danger, BOOL enabled, void (^action)(void)) {
+    return VActionRow(title, subtitle, symbol, value, danger, enabled, action, YES);
+}
+UIControl *QHVCommandRow(NSString *title, NSString *subtitle, NSString *symbol, NSString *value,
+                         BOOL danger, BOOL enabled, void (^action)(void)) {
+    return VActionRow(title, subtitle, symbol, value, danger, enabled, action, NO);
+}
 static UIView *VStat(NSString *title, NSString *value) {
-    UIStackView *panel = VStack();
-    panel.backgroundColor = VInner();
-    panel.layer.cornerRadius = 16;
-    panel.layoutMarginsRelativeArrangement = YES;
-    panel.layoutMargins = UIEdgeInsetsMake(14, 14, 14, 14);
-    UILabel *number = VLabel(value, UIFontTextStyleTitle2, NO);
-    UIFont *base = [UIFont systemFontOfSize:24 weight:UIFontWeightBold];
-    number.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleTitle2] scaledFontForFont:base];
+    QHVSurfaceStack *panel = (QHVSurfaceStack *)QHVCard();
+    panel.surfaceStyle = QHVSurfaceStyleInset;
+    panel.layer.cornerRadius = 14;
+    panel.spacing = 4;
+    panel.layoutMargins = UIEdgeInsetsMake(10, 12, 10, 12);
+    UILabel *number = VLabel(value, UIFontTextStyleTitle3, NO);
+    number.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleTitle3]
+        scaledFontForFont:[UIFont monospacedDigitSystemFontOfSize:20 weight:UIFontWeightSemibold]];
+    // Keep the number as arrangedSubviews[0] for the existing live-font fixture.
     [panel addArrangedSubview:number];
-    [panel addArrangedSubview:VLabel(title, UIFontTextStyleFootnote, YES)];
+    [panel addArrangedSubview:VTypeLabel(title, UIFontTextStyleFootnote, 12, UIFontWeightRegular, YES)];
     panel.isAccessibilityElement = YES;
     panel.accessibilityLabel = title;
     panel.accessibilityValue = value;
@@ -257,9 +442,9 @@ UIView *QHVStats(NSString *firstTitle, NSString *firstValue, NSString *secondTit
     return grid;
 }
 UIView *QHVFormRow(NSString *title, NSString *value) {
-    QHVFlexibleStack *row = VFlow(300);
-    UILabel *name = VLabel(title, UIFontTextStyleSubheadline, YES);
-    UILabel *number = VLabel(value, UIFontTextStyleHeadline, NO);
+    QHVFlexibleStack *row = VFlow(260);
+    UILabel *name = VTypeLabel(title, UIFontTextStyleSubheadline, 14, UIFontWeightRegular, YES);
+    UILabel *number = VTypeLabel(value, UIFontTextStyleBody, 15, UIFontWeightSemibold, NO);
     [name setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
     [number setContentHuggingPriority:UILayoutPriorityDefaultHigh forAxis:UILayoutConstraintAxisHorizontal];
     [row addArrangedSubview:name];
@@ -270,23 +455,24 @@ UIView *QHVFormRow(NSString *title, NSString *value) {
     return row;
 }
 UIView *QHVNote(NSString *text, NSString *symbol) {
-    UIStackView *card = QHVCard();
-    card.backgroundColor = VInner();
-    card.layer.cornerRadius = 16;
-    QHVFlexibleStack *line = VFlow(260);
+    QHVSurfaceStack *card = (QHVSurfaceStack *)QHVCard();
+    card.surfaceStyle = QHVSurfaceStyleInset;
+    card.layer.cornerRadius = 14;
+    card.layoutMargins = UIEdgeInsetsMake(12, 12, 12, 12);
+    QHVFlexibleStack *line = VFlow(250);
     [line addArrangedSubview:QHVIconTile(symbol, NO, NO)];
-    [line addArrangedSubview:VLabel(text, UIFontTextStyleFootnote, YES)];
+    [line addArrangedSubview:VTypeLabel(text, UIFontTextStyleFootnote, 13, UIFontWeightRegular, YES)];
     [card addArrangedSubview:line];
     return card;
 }
 UILabel *QHVSection(NSString *title) {
-    UILabel *heading = VLabel(title, UIFontTextStyleFootnote, YES);
+    UILabel *heading = VTypeLabel(title, UIFontTextStyleFootnote, 13, UIFontWeightMedium, YES);
     heading.accessibilityTraits |= UIAccessibilityTraitHeader;
     return heading;
 }
 UIView *QHVSeparator(void) {
     UIView *line = [UIView new];
-    line.backgroundColor = VLine();
+    line.backgroundColor = QHVLineColor();
     [line.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale].active = YES;
     line.isAccessibilityElement = NO;
     return line;
