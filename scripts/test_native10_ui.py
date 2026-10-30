@@ -34,6 +34,17 @@ def check(dialog, controller, components=None):
                      'self.centeredCard=card;', '[self setNavigationBarHidden:YES animated:NO];',
                      'holder.layer.cornerRadius=12;', 'field.borderStyle=UITextBorderStyleNone'):
         assert required in dialog, required
+    # Compact confirmation is a stacked decision, not a reused info row.
+    confirm = section(dialog, '- (void)buildCenteredConfirmation {', '- (void)chooseAction:')
+    assert 'card.accessibilityIdentifier=@"qh.dialog.confirm";' in confirm
+    assert 'QHConfirmTextBlock(self.content.title,self.detail)' in confirm
+    assert 'QHVInfo(' not in confirm, 'Compact confirmation no longer reuses the icon info row'
+    assert 'QHCenteredActionButton(' not in dialog, 'The old side-by-side confirm button must stay removed'
+    assert '[card addArrangedSubview:QHConfirmButton(primary,YES,self)];' in confirm
+    assert '[card addArrangedSubview:QHConfirmButton(cancel,NO,self)];' in confirm
+    assert confirm.index('[card addArrangedSubview:QHConfirmButton(primary,YES,self)];') < \
+        confirm.index('[card addArrangedSubview:QHConfirmButton(cancel,NO,self)];'), 'Primary action must precede the text-only cancel'
+    assert 'constraintGreaterThanOrEqualToConstant:primary ? 50 : 44' in dialog, 'Confirm actions keep touch-friendly heights'
     fields = section(dialog, 'for (UITextField *field in self.mutableFields)', '__weak typeof(self) weak=self;')
     assert 'field.translatesAutoresizingMaskIntoConstraints=NO;' in fields
     assert fields.index('field.translatesAutoresizingMaskIntoConstraints=NO;') < fields.index('[holder addSubview:field];')
@@ -64,7 +75,7 @@ def check(dialog, controller, components=None):
     assert '- (void)viewDidLoad' not in dialog
     assert 'readwrite' not in (ROOT / 'App/QHDialogController.h').read_text(encoding='utf-8')
     assert 'QHCenteredConfirmationFor(' in dialog and 'NSCharacterSet.newlineCharacterSet' in dialog
-    decision = section(dialog, 'static BOOL QHCenteredConfirmationFor(', 'static UIButton *QHCenteredActionButton(')
+    decision = section(dialog, 'static BOOL QHCenteredConfirmationFor(', 'static UIView *QHConfirmTextBlock(')
     assert 'style==UIAlertControllerStyleAlert && fields==0 && actions>0 && actions<=2' in decision
     assert 'detail.length<500' in decision
     handler = section(dialog, '- (void)chooseAction:(QHDialogAction *)action {', '- (void)viewWillAppear:')
@@ -161,6 +172,15 @@ def main():
         ('choices.accessibilityIdentifier=@"qh.dialog.choices";', ''),
         ('scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]',
          'scaledFontForFont:[UIFont systemFontOfSize:13 weight:UIFontWeightSemibold]'),
+        ('[card addArrangedSubview:QHConfirmButton(cancel,NO,self)];',
+         '[card addArrangedSubview:QHConfirmButton(cancel,YES,self)];'),
+        ('[card addArrangedSubview:QHConfirmButton(primary,YES,self)];',
+         '[card addArrangedSubview:QHConfirmButton(primary,NO,self)];'),
+        ('card.accessibilityIdentifier=@"qh.dialog.confirm";', ''),
+        ('QHConfirmTextBlock(self.content.title,self.detail)',
+         'QHVInfo(self.content.title,self.detail,@"doc.text",nil)'),
+        ('constraintGreaterThanOrEqualToConstant:primary ? 50 : 44',
+         'constraintGreaterThanOrEqualToConstant:primary ? 40 : 30'),
     ]
     for old, new in mutations:
         changed = dialog.replace(old, new)
@@ -183,7 +203,8 @@ def main():
                      'real import and diagnostics open expanded without a swipe',
                      'full-screen capture completed before keyboard dismissal',
                      'short confirmation uses the centered card', 'short confirmation is not a bottom sheet',
-                     'cancel precedes confirm in one centered card', 'paired actions share one row',
+                     'primary action sits above the text-only cancel', 'stacked dialog actions share one centered column',
+                     'stacked dialog actions share the card width', 'stacked dialog actions keep touch-friendly heights',
                      'QHDialogSetterSpy dialogControllerWithTitle:', 'lastStoredPresentationStyle==expected',
                      'lastStoredTransitionStyle==transition', 'animated:stage<=1',
                      'QHDialogInspectField(', '[window hitTest:', 'answers window hitTest at every valid text point',

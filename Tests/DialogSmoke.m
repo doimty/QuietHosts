@@ -406,10 +406,12 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
         UIControl *confirm=DialogControl(dialog.view,@"Confirm test");
         [self check:cancel && confirm name:@"paired actions are reachable controls"];
         if(cancel && confirm) {
-            CGRect left=[cancel convertRect:cancel.bounds toView:dialog.view];
-            CGRect right=[confirm convertRect:confirm.bounds toView:dialog.view];
-            [self check:CGRectGetMidX(left)<CGRectGetMidX(right) name:@"cancel precedes confirm in one centered card"];
-            [self check:fabs(CGRectGetMidY(left)-CGRectGetMidY(right))<=1.0 name:@"paired actions share one row"];
+            CGRect primaryRect=[confirm convertRect:confirm.bounds toView:dialog.view];
+            CGRect cancelRect=[cancel convertRect:cancel.bounds toView:dialog.view];
+            [self check:CGRectGetMidY(primaryRect)<CGRectGetMidY(cancelRect) name:@"primary action sits above the text-only cancel"];
+            [self check:fabs(CGRectGetMidX(primaryRect)-CGRectGetMidX(cancelRect))<=1.0 name:@"stacked dialog actions share one centered column"];
+            [self check:fabs(CGRectGetWidth(primaryRect)-CGRectGetWidth(cancelRect))<=1.0 name:@"stacked dialog actions share the card width"];
+            [self check:CGRectGetHeight(primaryRect)>=49.0 && CGRectGetHeight(cancelRect)>=43.0 name:@"stacked dialog actions keep touch-friendly heights"];
         }
     }
     if(stage>=4) {

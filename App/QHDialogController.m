@@ -70,31 +70,68 @@ static BOOL QHCenteredConfirmationFor(UIAlertControllerStyle style, NSUInteger f
            detail.length<500 && [detail rangeOfCharacterFromSet:NSCharacterSet.newlineCharacterSet].location==NSNotFound;
 }
 
-static UIButton *QHCenteredActionButton(QHDialogAction *action, BOOL primary, QHDialogController *owner) {
+// Compact confirmation copy: heading plus optional explanation, no icon tile.
+// The whole block is one VoiceOver element so the title and body are not read
+// as two unrelated stops above the decision.
+static UIView *QHConfirmTextBlock(NSString *title, NSString *detail) {
+    UIStackView *text=[UIStackView new];
+    text.axis=UILayoutConstraintAxisVertical;
+    text.spacing=6;
+    UILabel *heading=[UILabel new];
+    heading.text=title;
+    heading.numberOfLines=0;
+    heading.adjustsFontForContentSizeCategory=YES;
+    heading.font=[[UIFontMetrics metricsForTextStyle:UIFontTextStyleHeadline]
+        scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]];
+    heading.textColor=QHVPrimaryTextColor();
+    [text addArrangedSubview:heading];
+    if (detail.length) {
+        UILabel *body=[UILabel new];
+        body.text=detail;
+        body.numberOfLines=0;
+        body.adjustsFontForContentSizeCategory=YES;
+        body.font=[[UIFontMetrics metricsForTextStyle:UIFontTextStyleSubheadline]
+            scaledFontForFont:[UIFont systemFontOfSize:15 weight:UIFontWeightRegular]];
+        body.textColor=QHVSecondaryTextColor();
+        [text addArrangedSubview:body];
+    }
+    text.isAccessibilityElement=YES;
+    text.accessibilityLabel=detail.length ? [NSString stringWithFormat:@"%@. %@",title,detail] : title;
+    return text;
+}
+
+// Stacked actions: the committing choice is filled, the escape is plain text.
+// Both keep the card width so long localized labels wrap instead of squeezing.
+static UIButton *QHConfirmButton(QHDialogAction *action, BOOL primary, QHDialogController *owner) {
     __weak typeof(owner) weak=owner;
     UIButton *button=[UIButton buttonWithType:UIButtonTypeSystem];
-    UIButtonConfiguration *configuration=UIButtonConfiguration.filledButtonConfiguration;
+    UIButtonConfiguration *configuration=primary ? UIButtonConfiguration.filledButtonConfiguration
+                                                : UIButtonConfiguration.plainButtonConfiguration;
     configuration.title=action.title;
     if (primary) {
         configuration.baseBackgroundColor=action.style==UIAlertActionStyleDestructive ? QHVDestructiveColor() : QHVAccentColor();
         configuration.baseForegroundColor=QHVPrimaryForegroundColor();
     } else {
-        configuration.baseBackgroundColor=QHVInnerColor();
-        configuration.baseForegroundColor=QHVAccentColor();
+        configuration.baseBackgroundColor=UIColor.clearColor;
+        configuration.baseForegroundColor=QHVSecondaryTextColor();
     }
     configuration.cornerStyle=UIButtonConfigurationCornerStyleLarge;
-    configuration.contentInsets=NSDirectionalEdgeInsetsMake(12,16,12,16);
+    configuration.contentInsets=NSDirectionalEdgeInsetsMake(13,16,13,16);
     configuration.titleTextAttributesTransformer=^NSDictionary *(NSDictionary *input) {
         NSMutableDictionary *attributes=[input mutableCopy];
-        attributes[NSFontAttributeName]=[[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody]
-            scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]];
+        attributes[NSFontAttributeName]=primary
+            ? [[UIFontMetrics metricsForTextStyle:UIFontTextStyleHeadline]
+                scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]]
+            : [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody]
+                scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightRegular]];
         return attributes;
     };
     button.configuration=configuration;
     button.titleLabel.numberOfLines=0;
     button.titleLabel.adjustsFontForContentSizeCategory=YES;
     button.accessibilityLabel=action.title;
-    [button.heightAnchor constraintGreaterThanOrEqualToConstant:46].active=YES;
+    button.accessibilityIdentifier=primary ? @"qh.dialog.confirm.primary" : @"qh.dialog.confirm.cancel";
+    [button.heightAnchor constraintGreaterThanOrEqualToConstant:primary ? 50 : 44].active=YES;
     [button addAction:[UIAction actionWithHandler:^(__kindof UIAction *event) {
         (void)event;[weak chooseAction:action];
     }] forControlEvents:UIControlEventTouchUpInside];
@@ -166,29 +203,25 @@ static UIStackView *QHCenteredCard(void) {
         [canvas.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor],
         [canvas.heightAnchor constraintGreaterThanOrEqualToAnchor:scroll.frameLayoutGuide.heightAnchor]
     ]];
-    BOOL danger=NO;
-    for (QHDialogAction *action in self.mutableActions) if (action.style==UIAlertActionStyleDestructive) danger=YES;
     UIStackView *card=QHCenteredCard();
+    card.accessibilityIdentifier=@"qh.dialog.confirm";
     [canvas addSubview:card];
-    [card addArrangedSubview:QHVInfo(self.content.title,self.detail,danger ? @"exclamationmark.shield" : @"doc.text",nil)];
+    UIView *textBlock=QHConfirmTextBlock(self.content.title,self.detail);
+    [card addArrangedSubview:textBlock];
     QHDialogAction *cancel=nil,*primary=nil;
     for (QHDialogAction *action in self.mutableActions) {
         if (action.style==UIAlertActionStyleCancel && !cancel) { cancel=action; continue; }
         if (!primary) primary=action;
     }
-    if (self.mutableActions.count==1) {
-        [card addArrangedSubview:QHCenteredActionButton(self.mutableActions.firstObject, YES, self)];
-    } else if (cancel && primary) {
-        UIStackView *row=[UIStackView new];
-        row.axis=UILayoutConstraintAxisHorizontal;
-        row.spacing=10;
-        row.distribution=UIStackViewDistributionFillEqually;
-        [row addArrangedSubview:QHCenteredActionButton(cancel, NO, self)];
-        [row addArrangedSubview:QHCenteredActionButton(primary, YES, self)];
-        [card addArrangedSubview:row];
-    } else {
-        for (QHDialogAction *action in self.mutableActions) [card addArrangedSubview:QHCenteredActionButton(action, YES, self)];
+    // Primary first, then any further defaults, then the escape as plain text:
+    // consent never competes visually with cancelling.
+    if (primary) [card addArrangedSubview:QHConfirmButton(primary,YES,self)];
+    for (QHDialogAction *action in self.mutableActions) {
+        if (action==primary || action==cancel) continue;
+        [card addArrangedSubview:QHConfirmButton(action,YES,self)];
     }
+    if (cancel) [card addArrangedSubview:QHConfirmButton(cancel,NO,self)];
+    [card setCustomSpacing:18 afterView:textBlock];
     CGFloat width=MIN(320.0, CGRectGetWidth(UIScreen.mainScreen.bounds)-64.0);
     [NSLayoutConstraint activateConstraints:@[
         [card.centerXAnchor constraintEqualToAnchor:canvas.centerXAnchor],

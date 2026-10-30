@@ -1,5 +1,9 @@
 # 静域 / QuietHosts
 
+## Native18 dialog candidate — P1 only
+
+`feat/native18-dialog-polish` (`0.1.0-1+native18`, App build18) starts the dialog rework planned in [docs/NATIVE18_DIALOG_PLAN.md](docs/NATIVE18_DIALOG_PLAN.md). Phase 1 replaces the short confirmation's reused icon row with a dedicated title/body block and stacks the actions: a filled primary above a text-only cancel, both full card width. Menu and form dialogs are unchanged until P2/P3. Consent, cancel, dismissal ordering, frozen `chooseAction:` bytes and the mock-write gate are untouched. Router, helper and Hosts behavior remain unchanged. This is a review candidate, not a store release.
+
 ## Native17 UI candidate — not a Havoc release
 
 The isolated `feat/havoc-native17-polish` candidate (`0.1.0-1+native17`, App build17) reworks Home into one verified-file status card and one local-draft workflow, shares appearance tokens across pages/dialogs, distinguishes navigation rows from commands, and adds bilingual first-use/privacy/support guidance. It preserves the restricted helper, explicit confirmation, checked restore and local rule semantics. UI smoke is a single prerequisite job for both package builds; candidate artifacts include the run attempt and upload only after validation succeeds. See [Native17 scope and validation](docs/NATIVE17.md) and [Havoc readiness](docs/HAVOC_READINESS.md). This candidate is for review/testing only, not a paid beta or an already approved store release. Actual cloud and device results must be reported separately.
