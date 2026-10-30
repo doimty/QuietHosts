@@ -25,7 +25,10 @@ UIColor *QHVLineColor(void) { return VColor(0xe2deed, 0x35323f); }
 UIColor *QHVDestructiveColor(void) { return VColor(0xae243e, 0xff929f); }
 UIColor *QHVPrimaryForegroundColor(void) { return VColor(0xffffff, 0x171322); }
 static UIColor *VTile(void) { return VColor(0xede8fb, 0x332d4d); }
-static UIColor *VHero(void) { return VColor(0xeeebfb, 0x252139); }
+/* The managed card is a neutral surface: the status colour (green/amber) is the
+ * signal, the way a protection app marks an active shield. Lavender stays for
+ * brand and the primary action only. */
+static UIColor *VHero(void) { return VColor(0xffffff, 0x1c1c24); }
 static UIColor *VDangerBackground(void) { return VColor(0xffedf1, 0x402630); }
 static UIColor *VGood(void) { return VColor(0x246449, 0x93dcba); }
 static UIColor *VGoodBackground(void) { return VColor(0xe4f1e9, 0x223b31); }
@@ -279,7 +282,8 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
     // shield: green when the rules are in effect, amber when attention is due.
     UIColor *tint = attention ? VAttention() : (active ? VGood() : QHVSecondaryTextColor());
     UIColor *tile = attention ? VAttentionBackground() : (active ? VGoodBackground() : QHVInnerColor());
-    [header addArrangedSubview:VIconTile(attention ? @"exclamationmark.shield" : @"shieldcheck", NO, tint, tile)];
+    [header addArrangedSubview:VIconTile(attention ? @"exclamationmark.shield"
+                                                  : (active ? @"checkmark.shield" : @"shield"), NO, tint, tile)];
     UIStackView *text = VStack();
     text.spacing = 4;
     // Status chip rides beside the state at normal sizes and drops to its own
