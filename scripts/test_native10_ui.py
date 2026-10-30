@@ -41,9 +41,9 @@ def check(dialog, controller, components=None):
     assert 'QHVInfo(' not in confirm, 'Compact confirmation no longer reuses the icon info row'
     assert 'QHCenteredActionButton(' not in dialog, 'The old side-by-side confirm button must stay removed'
     assert '[card addArrangedSubview:QHConfirmButton(primary,YES,self)];' in confirm
-    assert '[card addArrangedSubview:QHConfirmButton(cancel,NO,self)];' in confirm
+    assert '[card addArrangedSubview:QHConfirmButton(cancel,!primary,self)];' in confirm
     assert confirm.index('[card addArrangedSubview:QHConfirmButton(primary,YES,self)];') < \
-        confirm.index('[card addArrangedSubview:QHConfirmButton(cancel,NO,self)];'), 'Primary action must precede the text-only cancel'
+        confirm.index('[card addArrangedSubview:QHConfirmButton(cancel,!primary,self)];'), 'Primary action must precede the escape action'
     assert 'constraintGreaterThanOrEqualToConstant:primary ? 50 : 44' in dialog, 'Confirm actions keep touch-friendly heights'
     fields = section(dialog, 'for (UITextField *field in self.mutableFields)', '__weak typeof(self) weak=self;')
     assert 'field.translatesAutoresizingMaskIntoConstraints=NO;' in fields
@@ -175,7 +175,7 @@ def main():
         ('choices.accessibilityIdentifier=@"qh.dialog.choices";', ''),
         ('scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]',
          'scaledFontForFont:[UIFont systemFontOfSize:13 weight:UIFontWeightSemibold]'),
-        ('[card addArrangedSubview:QHConfirmButton(cancel,NO,self)];',
+        ('[card addArrangedSubview:QHConfirmButton(cancel,!primary,self)];',
          '[card addArrangedSubview:QHConfirmButton(cancel,YES,self)];'),
         ('[card addArrangedSubview:QHConfirmButton(primary,YES,self)];',
          '[card addArrangedSubview:QHConfirmButton(primary,NO,self)];'),

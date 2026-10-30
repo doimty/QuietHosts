@@ -220,7 +220,9 @@ static UIStackView *QHCenteredCard(void) {
         if (action==primary || action==cancel) continue;
         [card addArrangedSubview:QHConfirmButton(action,YES,self)];
     }
-    if (cancel) [card addArrangedSubview:QHConfirmButton(cancel,NO,self)];
+    // A lone acknowledgement is the decision itself, so it stays filled; only a
+    // paired escape is demoted to text.
+    if (cancel) [card addArrangedSubview:QHConfirmButton(cancel,!primary,self)];
     [card setCustomSpacing:18 afterView:textBlock];
     CGFloat width=MIN(320.0, CGRectGetWidth(UIScreen.mainScreen.bounds)-64.0);
     [NSLayoutConstraint activateConstraints:@[
