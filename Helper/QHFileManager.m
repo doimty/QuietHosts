@@ -1565,7 +1565,8 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
             count = [t.state[@"domainCount"] unsignedIntegerValue];
         }
         if ((!t.state && !active) ||
-            (t.state && [t.state[@"active"] boolValue] == active && [t.snapshot isEqual:candidate])) {
+            (t.state && [t.state[@"active"] boolValue] == active && [t.snapshot isEqual:candidate] &&
+             !t.targetReverted)) {
             return observed;
         }
         if (active) {

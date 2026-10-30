@@ -670,6 +670,7 @@ static void RevertedAtBoot(void) {
           @"reported status is read only for the raw system file");
     NSData *updated = Text(@"0.0.0.0 afterboot.example\n::1 afterboot.example\n");
     NSDictionary *result = [f apply:updated count:1 revision:status[@"revision"]];
+    NSLog(@"QH_REVERT_TEST status=%@ apply=%@", status, result);
     Check([result[@"ok"] boolValue] && [result[@"state"] isEqual:@"active"] && [result[@"changed"] boolValue],
           @"re-apply rewrites the reverted entry instead of reporting a no-op");
     struct stat rewritten;
