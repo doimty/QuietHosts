@@ -174,6 +174,15 @@ def check_ui(ui, components, header, dialog):
     assert home.index('[draftCard addArrangedSubview:apply]') < home.index('[home addArrangedSubview:draftCard]')
     assert 'if (!self.draftTipDismissed && [self.draft.document[@"sources"] count] == 0)' in home
     assert 'boolForKey:@"QHGuideDismissed"' in method(ui, 'init') and 'setBool:YES forKey:@"QHGuideDismissed"' in home
+    # Tab appearance must not tear every page down: the passive refresh is
+    # silent, skips a fresh helper round trip, and rebuilds only on real change.
+    passive = method(ui, 'refreshStatusPassively')
+    assert '[weak refreshStatusPassively]' in method(ui, 'init'), 'Page appearance uses the silent refresh'
+    assert 'timeIntervalSinceNow] < 5.0' in passive, 'Fresh verified state avoids a redundant helper round trip'
+    assert '[self render];' not in passive, 'Passive refresh never rebuilds before the result arrives'
+    assert 'self.refreshing = YES;' in passive and 'weak.refreshing = NO;' in passive
+    assert 'if (changed && !weak.busy) [weak render];' in passive, 'Rebuild only when the verified state actually changed'
+    assert 'previous == nil || ![previous isEqualToDictionary:result]' in passive
     online = method(ui, 'hasOnlineSources')
     assert 'self.draft.document[@"sources"]' in online and '[source[@"kind"] isEqual:@"url"]' in online
     assert compact('if ([source[@"kind"] isEqual:@"url"]) return YES;') in compact(online)

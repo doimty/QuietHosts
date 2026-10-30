@@ -94,9 +94,12 @@ def check(dialog, controller, components=None):
                      'configuration.baseForegroundColor=QHVPrimaryForegroundColor()',
                      'configuration.baseBackgroundColor=action.style==UIAlertActionStyleDestructive ? QHVDestructiveColor() : QHVAccentColor()',
                      'scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]',
-                     'configuration.contentInsets=NSDirectionalEdgeInsetsMake(12,16,12,16)',
-                     'constraintGreaterThanOrEqualToConstant:46'):
+                     'NSDirectionalEdgeInsetsMake(13,16,13,16)',
+                     '[stack addArrangedSubview:QHConfirmButton(action,YES,self)];'):
         assert required in dialog, required
+    # One text block and one filled-action spec serve compact and expanded dialogs.
+    assert dialog.count('QHConfirmTextBlock(self.content.title,self.detail)') == 2, 'Both dialog shapes share the same title/body block'
+    assert 'QHVInfo(self.content.title' not in dialog, 'Dialogs must not fall back to the icon info row'
     # ActionSheet options share one group. Cancellation remains the separate
     # original navigation action and still routes through chooseAction.
     choices = section(appearance, '__weak typeof(self) weak=self;', None)

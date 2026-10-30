@@ -240,6 +240,8 @@ static BOOL Animate(void) {
 @property(nonatomic, copy) NSString *appliedLocalRevision;
 @property(nonatomic, copy) NSString *appliedHelperRevision;
 @property(nonatomic) BOOL busy;
+@property(nonatomic) BOOL refreshing;
+@property(nonatomic, strong) NSDate *statusUpdatedAt;
 @property(nonatomic) BOOL pendingStatus;
 @property(nonatomic) BOOL pickingAllowlist;
 @property(nonatomic, strong) UIDocumentPickerViewController *filePicker;
@@ -249,6 +251,7 @@ static BOOL Animate(void) {
 @property(nonatomic) BOOL draftTipDismissed;
 @property(nonatomic) int notificationToken;
 @property(nonatomic) BOOL observing;
+- (void)refreshStatusPassively;
 @end
 
 @implementation QHAppController {
@@ -283,7 +286,7 @@ static BOOL Animate(void) {
             QHPage *page = [QHPage new];
             page.title = titles[i];
             page.appeared = ^{
-                [weak refreshStatus];
+                [weak refreshStatusPassively];
             };
             UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:page];
             nav.navigationBar.prefersLargeTitles = i != 0;
@@ -312,7 +315,7 @@ static BOOL Animate(void) {
         if (notify_register_dispatch("com.doimty.quiethosts.changed", &token, dispatch_get_main_queue(),
                                      ^(int t) {
                                          (void)t;
-                                         [weak refreshStatus];
+                                         [weak refreshStatusPassively];
                                      }) == NOTIFY_STATUS_OK) {
             _notificationToken = token;
             _observing = YES;
@@ -422,6 +425,32 @@ static BOOL Animate(void) {
 }
 - (void)addHeading:(NSString *)text to:(UIStackView *)stack {
     [stack addArrangedSubview:Label(text, UIFontTextStyleHeadline, NO)];
+}
+// Appearance and external-change refreshes must not tear the visible pages down:
+// render() rebuilds all three pages, so doing that on every tab switch showed as
+// a flash. This path stays silent, skips the helper while the verified state is
+// fresh, and rebuilds only when the state actually changed.
+- (void)refreshStatusPassively {
+    if (self.busy || self.refreshing) return;
+    if (self.status && self.statusUpdatedAt &&
+        -[self.statusUpdatedAt timeIntervalSinceNow] < 5.0) return;
+    self.refreshing = YES;
+    __weak typeof(self) weak = self;
+    [QHBridge request:@"status"
+              payload:@{}
+           completion:^(NSDictionary *result) {
+               weak.refreshing = NO;
+               NSDictionary *previous = weak.status;
+               weak.statusUpdatedAt = [NSDate date];
+               weak.status = result;
+               if (![weak.appliedHelperRevision isEqual:result[@"revision"]] ||
+                   ![result[@"state"] isEqual:@"active"]) {
+                   weak.appliedHelperRevision = nil;
+                   weak.appliedLocalRevision = nil;
+               }
+               BOOL changed = previous == nil || ![previous isEqualToDictionary:result];
+               if (changed && !weak.busy) [weak render];
+           }];
 }
 - (NSString *)shortState {
     if (!self.status) return QHL(@"Checking file state");

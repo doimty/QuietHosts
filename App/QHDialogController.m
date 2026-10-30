@@ -278,10 +278,10 @@ static UIStackView *QHCenteredCard(void) {
         [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor constant:-18],
         [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-36]
     ]];
-    BOOL danger=NO;
-    for (QHDialogAction *action in self.mutableActions) if (action.style==UIAlertActionStyleDestructive) danger=YES;
+    // Every dialog is text-first: the same title/body block as the compact
+    // confirmation, so short and expanded dialogs read as one family.
     UIStackView *intro=QHVCard();
-    [intro addArrangedSubview:QHVInfo(self.content.title,self.detail,danger ? @"exclamationmark.shield" : @"doc.text",nil)];
+    [intro addArrangedSubview:QHConfirmTextBlock(self.content.title,self.detail)];
     [stack addArrangedSubview:intro];
     if (self.mutableFields.count) {
         UIStackView *inputs=QHVCard();
@@ -352,27 +352,9 @@ static UIStackView *QHCenteredCard(void) {
             [choices addArrangedSubview:QHVRow(action.title,nil,action.style==UIAlertActionStyleDestructive ? @"trash" : @"circle",nil,
                 action.style==UIAlertActionStyleDestructive,YES,^{ [weak chooseAction:action]; })];
         } else {
-            UIButton *button=[UIButton buttonWithType:UIButtonTypeSystem];
-            UIButtonConfiguration *configuration=UIButtonConfiguration.filledButtonConfiguration;
-            configuration.title=action.title;
-            configuration.baseBackgroundColor=action.style==UIAlertActionStyleDestructive ? QHVDestructiveColor() : QHVAccentColor();
-            configuration.baseForegroundColor=QHVPrimaryForegroundColor();
-            configuration.cornerStyle=UIButtonConfigurationCornerStyleLarge;
-            configuration.contentInsets=NSDirectionalEdgeInsetsMake(12,16,12,16);
-    configuration.titleTextAttributesTransformer=^NSDictionary *(NSDictionary *input) {
-        NSMutableDictionary *attributes=[input mutableCopy];
-        attributes[NSFontAttributeName]=[[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody]
-            scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]];
-        return attributes;
-    };
-            button.configuration=configuration;
-            button.titleLabel.numberOfLines=0;button.titleLabel.adjustsFontForContentSizeCategory=YES;
-            button.accessibilityLabel=action.title;
-            [button.heightAnchor constraintGreaterThanOrEqualToConstant:46].active=YES;
-            [button addAction:[UIAction actionWithHandler:^(__kindof UIAction *event) {
-                (void)event;[weak chooseAction:action];
-            }] forControlEvents:UIControlEventTouchUpInside];
-            [stack addArrangedSubview:button];
+            // Same filled spec, insets and height as the compact confirmation's
+            // primary action: one button language across every dialog.
+            [stack addArrangedSubview:QHConfirmButton(action,YES,self)];
         }
     }
 }

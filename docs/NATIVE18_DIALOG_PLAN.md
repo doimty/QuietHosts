@@ -1,6 +1,6 @@
 # Native18 · 弹窗重做规划
 
-> 状态：P1 已实现（`0.1.0-1+native18`），待云端 UIKit 截图复核；P2/P3 未开始。native17 已交付（[DELIVERY.md](../../deliverables/quiethosts/native17/DELIVERY.md)）。
+> 状态：P1 已通过云端（native18）。随后修复标签切换闪烁并统一弹窗文字块/按钮规格（`0.1.0-1+native19`）。P2/P3 未开始。native17 已交付（[DELIVERY.md](../../deliverables/quiethosts/native17/DELIVERY.md)）。
 > 基线：`feat/havoc-native17-polish` / `a64ee6f`；两份 native17 候选包已在云端通过。
 > 许可边界：只参考公开开源项目的**交互与排版**，不复制源码。Signal iOS 为 AGPL-3.0-only、Telegram 未核实统一根许可证，均不得进入本 MIT 项目；Wikipedia iOS 为 MIT，仍是"参考"而非搬运。
 
@@ -91,6 +91,16 @@ P1 保留现有判定函数：它对本版 7 个调用点给出的结果与新�
 规则必须覆盖上表 7 个场景；任何一条改动都要有对应的拒绝变异。
 
 ## 6. 实施阶段
+
+### P1 后的闪烁修复与统一（native19）
+
+真机反馈"切换界面闪烁"，根因是页面出现即调用 `refreshStatus`：它先置 busy 并 `render`，而 `render` 会销毁重建全部三页，helper 返回后再重建一次。修复：
+
+- 页面出现与外部变更通知改走 `refreshStatusPassively`：不置 busy、不预渲染、5 秒内不重复请求，且只在状态真正变化时重建。
+- 用户主动点「刷新文件状态」仍走原 `refreshStatus`（保留 busy 提示与 `pendingStatus`）。
+- 冻结的 `refreshStatus` 与历史方法区间保持字节不变，新方法放在冻结区间之外。
+
+统一：展开式弹窗的标题正文改用与确认框相同的 `QHConfirmTextBlock`，主操作统一用 `QHConfirmButton`（50pt、同字号、同圆角），对话框一律文字优先、不用图标信息行。
 
 | 阶段 | 内容 | 产出 |
 |---|---|---|
