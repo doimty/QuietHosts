@@ -88,7 +88,7 @@ def main():
         case(scheme,'wrong minOS',lambda s,a,h:(a/'QuietHosts').write_bytes(binary(scheme,minimum=0x100000)),'Missing minOS/signature')
         case(scheme,'missing signature',lambda s,a,h:(a/'QuietHosts').write_bytes(binary(scheme,signed=False)),'Missing minOS/signature')
         case(scheme,'App build mismatch',lambda s,a,h:change_info(a,'CFBundleVersion','12'),'Staged App metadata mismatch')
-        case(scheme,'package version mismatch',lambda s,a,h:replace_text(s/'DEBIAN/control','native30','native29'),'Staged package metadata mismatch')
+        case(scheme,'package version mismatch',lambda s,a,h:replace_text(s/'DEBIAN/control','native31','native30'),'Staged package metadata mismatch')
         case(scheme,'control architecture mismatch',lambda s,a,h:replace_text(s/'DEBIAN/control','iphoneos-arm64' if scheme=='rootless' else 'iphoneos-arm64e','iphoneos-arm64e' if scheme=='rootless' else 'iphoneos-arm64'),'Staged package metadata mismatch')
         case(scheme,'wrong Section',lambda s,a,h:replace_text(s/'DEBIAN/control','Section: Applications','Section: Tweaks'),'Staged package metadata mismatch: Section')
         case(scheme,'dependency mismatch',lambda s,a,h:replace_text(s/'DEBIAN/control','com.ps.letmeblock','wrong.dependency'),'Staged package metadata mismatch')

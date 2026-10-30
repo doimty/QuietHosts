@@ -305,3 +305,6 @@
 "Opens GitHub. No report is sent automatically." = "Opens GitHub. No report is sent automatically.";
 "Rules were restored after a restart" = "Rules were restored after a restart";
 "The system rebuilt its Hosts mirror when it restarted. Saved rules are not active; preview and apply to install them again." = "The system rebuilt its Hosts mirror when it restarted. Saved rules are not active; preview and apply to install them again.";
+"%@ sources · %@ domains" = "%@ sources · %@ domains";
+"Appearance, files and help" = "Appearance, files and help";
+"Local rules must load first" = "Local rules must load first";

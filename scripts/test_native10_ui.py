@@ -32,7 +32,7 @@ def check(dialog, controller, components=None):
                      '- (BOOL)usesCenteredConfirmation', 'UIModalPresentationOverFullScreen',
                      'UIModalTransitionStyleCrossDissolve', '[self buildCenteredConfirmation];',
                      'self.centeredCard=card;', '[self setNavigationBarHidden:YES animated:NO];',
-                     'holder.layer.cornerRadius=12;', 'field.borderStyle=UITextBorderStyleNone'):
+                     'holder.layer.cornerRadius=10;', 'field.borderStyle=UITextBorderStyleNone'):
         assert required in dialog, required
     # Compact confirmation is a stacked decision, not a reused info row.
     confirm = section(dialog, '- (void)buildCenteredConfirmation {', '- (void)chooseAction:')
@@ -44,7 +44,7 @@ def check(dialog, controller, components=None):
     assert '[card addArrangedSubview:QHConfirmButton(cancel,!primary,self)];' in confirm
     assert confirm.index('[card addArrangedSubview:QHConfirmButton(primary,YES,self)];') < \
         confirm.index('[card addArrangedSubview:QHConfirmButton(cancel,!primary,self)];'), 'Primary action must precede the escape action'
-    assert 'constraintGreaterThanOrEqualToConstant:primary ? 50 : 44' in dialog, 'Confirm actions keep touch-friendly heights'
+    assert 'constraintGreaterThanOrEqualToConstant:primary ? 46 : 42' in dialog, 'Confirm actions keep touch-friendly heights'
     fields = section(dialog, 'for (UITextField *field in self.mutableFields)', '__weak typeof(self) weak=self;')
     assert 'field.translatesAutoresizingMaskIntoConstraints=NO;' in fields
     assert fields.index('field.translatesAutoresizingMaskIntoConstraints=NO;') < fields.index('[holder addSubview:field];')
@@ -94,7 +94,7 @@ def check(dialog, controller, components=None):
                      'configuration.baseForegroundColor=QHVPrimaryForegroundColor()',
                      'configuration.baseBackgroundColor=action.style==UIAlertActionStyleDestructive ? QHVDestructiveColor() : QHVAccentColor()',
                      'scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]',
-                     'NSDirectionalEdgeInsetsMake(13,16,13,16)',
+                     'NSDirectionalEdgeInsetsMake(12,16,12,16)',
                      '[stack addArrangedSubview:QHConfirmButton(action,YES,self)];'):
         assert required in dialog, required
     # One text block and one filled-action spec serve compact and expanded dialogs.
@@ -182,7 +182,7 @@ def main():
         ('card.accessibilityIdentifier=@"qh.dialog.confirm";', ''),
         ('QHConfirmTextBlock(self.content.title,self.detail)',
          'QHVInfo(self.content.title,self.detail,@"doc.text",nil)'),
-        ('constraintGreaterThanOrEqualToConstant:primary ? 50 : 44',
+        ('constraintGreaterThanOrEqualToConstant:primary ? 46 : 42',
          'constraintGreaterThanOrEqualToConstant:primary ? 40 : 30'),
     ]
     for old, new in mutations:

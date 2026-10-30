@@ -86,6 +86,7 @@ static BOOL Animate(void) {
 @property(nonatomic) CGPoint rememberedOffset;
 @property(nonatomic) BOOL shouldRestoreOffset;
 @property(nonatomic) BOOL needsRender;
+@property(nonatomic) BOOL hidesNavigationBar;
 @property(nonatomic, copy) void (^draw)(void);
 @property(nonatomic, copy) void (^willAppear)(void);
 @property(nonatomic, copy) void (^appeared)(void);
@@ -134,6 +135,10 @@ static BOOL Animate(void) {
 }
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    // Root tabs carry their own masthead; pushed pages keep the navigation bar.
+    if (self.navigationController) {
+        [self.navigationController setNavigationBarHidden:self.hidesNavigationBar animated:animated];
+    }
     // Draw a stale page here: it may not be attached to a window yet, so the
     // controller's visible-page pass cannot reach it.
     if (self.needsRender && self.draw) {
@@ -323,7 +328,8 @@ static BOOL Animate(void) {
             nav.navigationBar.standardAppearance = navigation;
             nav.navigationBar.scrollEdgeAppearance = navigation;
             nav.navigationBar.tintColor = Accent();
-            [nav setNavigationBarHidden:(i == 0) animated:NO];
+            page.hidesNavigationBar = YES;
+            [nav setNavigationBarHidden:YES animated:NO];
             nav.tabBarItem = [[UITabBarItem alloc] initWithTitle:tabs[i]
                                                            image:[UIImage systemImageNamed:symbols[i]]
                                                              tag:(NSInteger)i];
@@ -696,15 +702,12 @@ static BOOL Animate(void) {
 - (void)renderRules {
     UIStackView *rules = self.pages[1].stack;
     __weak typeof(self) weak = self;
-    if (self.draft) {
-        UIStackView *library = QHVCard();
-        [library addArrangedSubview:QHVInfo(QHL(@"Your rule library"),
-            [NSString stringWithFormat:QHL(@"%@ sources · %@ draft domains"),
-                Number([self.draft.document[@"sources"] count]), Number(self.draft.compiled.domains.count)],
-            @"square.stack.3d.up", nil)];
-        [library addArrangedSubview:Label(QHL(@"Edit locally. Preview and apply when you are ready."), UIFontTextStyleFootnote, YES)];
-        [rules addArrangedSubview:library];
-    }
+    // Same masthead as Home: one page-header pattern for every tab.
+    NSString *rulesTagline = self.draft
+        ? [NSString stringWithFormat:QHL(@"%@ sources · %@ domains"),
+              Number([self.draft.document[@"sources"] count]), Number(self.draft.compiled.domains.count)]
+        : QHL(@"Local rules must load first");
+    [rules addArrangedSubview:QHVBrandHeader(QHL(@"Rules"), rulesTagline, NO, nil)];
     [rules addArrangedSubview:QHVSection(QHL(@"Rule sources"))];
     if (!self.draft) {
         [rules addArrangedSubview:QHVNote(QHL(@"Local storage must load successfully before you can change rules."), @"exclamationmark.triangle")];
@@ -792,6 +795,8 @@ static BOOL Animate(void) {
 - (void)renderSettings {
     UIStackView *settings = self.pages[2].stack;
     __weak typeof(self) weak = self;
+    // Same masthead as Home and Rules.
+    [settings addArrangedSubview:QHVBrandHeader(QHL(@"Settings"), QHL(@"Appearance, files and help"), NO, nil)];
     [settings addArrangedSubview:QHVSection(QHL(@"Appearance"))];
     UIStackView *appearance = QHVCard();
     [appearance addArrangedSubview:QHVRow(QHL(@"Theme"), self.themeTitle, @"paintpalette", nil, NO, YES, ^{

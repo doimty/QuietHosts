@@ -84,7 +84,7 @@ typedef NS_ENUM(NSUInteger, QHVSurfaceStyle) {
         self.axis = UILayoutConstraintAxisVertical;
         self.spacing = 8;
         self.layoutMarginsRelativeArrangement = YES;
-        self.layoutMargins = UIEdgeInsetsMake(16, 16, 16, 16);
+        self.layoutMargins = UIEdgeInsetsMake(14, 14, 14, 14);
         self.layer.cornerRadius = 12;
         [self updateChrome];
     }
@@ -290,7 +290,7 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
     QHVFlexibleStack *titleRow = VFlow(160);
     titleRow.alignment = UIStackViewAlignmentCenter;
     titleRow.spacing = 8;
-    UILabel *heading = VTypeLabel(title, UIFontTextStyleTitle3, 19, UIFontWeightSemibold, NO);
+    UILabel *heading = VTypeLabel(title, UIFontTextStyleTitle3, 18, UIFontWeightSemibold, NO);
     heading.accessibilityTraits |= UIAccessibilityTraitHeader;
     [heading setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
                                              forAxis:UILayoutConstraintAxisHorizontal];
@@ -405,7 +405,7 @@ static UIControl *VActionRow(NSString *title, NSString *subtitle, NSString *symb
     }
     QHVFlexibleStack *content = VInfo(title, subtitle, symbol, trailing.arrangedSubviews.count ? trailing : nil, danger);
     content.layoutMarginsRelativeArrangement = YES;
-    content.layoutMargins = UIEdgeInsetsMake(8, 0, 8, 0);
+    content.layoutMargins = UIEdgeInsetsMake(11, 0, 11, 0);
     // A single accessible control owns the text and capsule. The native switch
     // is used only in QHVInfo/StatusCard and must never live under this hiding.
     content.accessibilityElementsHidden = YES;

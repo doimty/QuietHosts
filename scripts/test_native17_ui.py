@@ -29,8 +29,8 @@ NEW_KEYS = {
     'Start in three steps',
     'Import a source you trust, review the merged rules, then explicitly apply. Nothing is applied during installation.',
     'Quick actions', 'All online sources, including excluded ones. Updates change the draft only.',
-    'Your rule library', '%@ sources · %@ draft domains',
-    'Edit locally. Preview and apply when you are ready.', 'Rule control', 'Help and privacy',
+    '%@ sources · %@ domains',
+    'Appearance, files and help', 'Rule control', 'Help and privacy',
     'Using QuietHosts', 'Privacy and local data', 'Project and support',
     'Import, review, apply. Restore when needed.', 'Understand what stays on this device.',
     'Opens GitHub. No report is sent automatically.',
@@ -417,7 +417,7 @@ def main():
         if kind == 'missing':
             del changed['locales']['zh-Hans']['Privacy and local data']
         elif kind == 'format':
-            changed['locales']['zh-Hans']['%@ sources · %@ draft domains'] = '%@ 个来源'
+            changed['locales']['zh-Hans']['%@ sources · %@ domains'] = '%@ 个来源'
         elif kind == 'english-copy':
             changed['locales']['zh-Hans']['Using QuietHosts'] = 'Using QuietHosts'
         else:
