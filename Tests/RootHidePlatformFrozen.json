@@ -2,7 +2,7 @@
   "baseline": "cee42b76dd96c6699648dd67bdff68f07f708f54",
   "files": {
     "Helper/main.m": "f7c956262d37868fc3f710486872bc99b1ee717de742a6e3125d16cb1e9b0a7c",
-    "Helper/QHFileManager.m": "f7b932055a1f2c0de08676726520cda6e832b73d4e3166a0745e9c9f985e3391",
+    "Helper/QHFileManager.m": "69fbc8e2d86e989f9f568772cd74d35cf666e46ab374e96600b618c9a1aea823",
     "Shared/QHBridge.m": "63ba2c5c8e96d8f5b7082011f0908e355548fce11d75349933f8d53221c4fff3",
     "App/Makefile": "dabc3dd9ee51f9cc05c93c6ea9697e9ae014077f9ef3a215b3856fc38dfa1ac3",
     "Helper/Makefile": "724fa731a58b60582976e28b96fbdadd6f2fac99564ce3b558d9d55f91ebb1c4",

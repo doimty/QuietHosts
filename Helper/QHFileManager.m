@@ -1354,6 +1354,19 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
     }
     return result;
 }
+/* Persist the observed truth before any write that assumes it: the system
+ * restored our recorded original, so the saved rules are not active. Keeping the
+ * revision means a client that already read status can still commit. */
+- (void)reconcileRevert {
+    NSMutableDictionary *next = [_state mutableCopy];
+    next[@"active"] = @NO;
+    next[@"domainCount"] = @0;
+    next[@"target"] = _target;
+    AtomicData(_stateFD, @"state.json", JSON(next), _owner, 0600, ^{
+        [self beforeWrite:@"reconcile-revert"];
+    });
+    [self load];
+}
 - (BOOL)transact:(NSData *)snapshot active:(BOOL)active count:(NSUInteger)count {
     if (!_state && !active) {
         return NO;
@@ -1546,6 +1559,13 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
         }
         if ([command isEqual:@"reload"]) {
             return observed; // only main can request DNS restart
+        }
+        if (t.targetReverted) {
+            /* State says active but the entry is the original again. Record that
+             * fact first, then let the normal transaction write from a coherent
+             * before-image instead of producing a journal it would reject. */
+            [t reconcileRevert];
+            observed = [t response];
         }
         if (hasAdoptionFlag && (!apply || t.state)) {
             Fail(@"invalid-request");
