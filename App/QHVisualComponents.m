@@ -81,8 +81,8 @@ typedef NS_ENUM(NSUInteger, QHVSurfaceStyle) {
         self.axis = UILayoutConstraintAxisVertical;
         self.spacing = 8;
         self.layoutMarginsRelativeArrangement = YES;
-        self.layoutMargins = UIEdgeInsetsMake(14, 14, 14, 14);
-        self.layer.cornerRadius = 16;
+        self.layoutMargins = UIEdgeInsetsMake(16, 16, 16, 16);
+        self.layer.cornerRadius = 12;
         [self updateChrome];
     }
     return self;
@@ -275,8 +275,11 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
     card.surfaceStyle = QHVSurfaceStyleHero;
     card.accessibilityIdentifier = @"qh.managed.card";
     QHVFlexibleStack *header = VFlow(280);
-    [header addArrangedSubview:VIconTile(attention ? @"exclamationmark.shield" : @"shield", NO,
-        attention ? VAttention() : QHVAccentColor(), attention ? VAttentionBackground() : VTile())];
+    // Protection colour carries the state, the way AdGuard marks an active
+    // shield: green when the rules are in effect, amber when attention is due.
+    UIColor *tint = attention ? VAttention() : (active ? VGood() : QHVSecondaryTextColor());
+    UIColor *tile = attention ? VAttentionBackground() : (active ? VGoodBackground() : QHVInnerColor());
+    [header addArrangedSubview:VIconTile(attention ? @"exclamationmark.shield" : @"shieldcheck", NO, tint, tile)];
     UIStackView *text = VStack();
     text.spacing = 4;
     // Status chip rides beside the state at normal sizes and drops to its own
@@ -290,7 +293,9 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
                                              forAxis:UILayoutConstraintAxisHorizontal];
     [titleRow addArrangedSubview:heading];
     if (state.length) {
-        UIView *badge = attention ? VBadge(state, VAttention(), VAttentionBackground()) : QHVBadge(state, active);
+        UIView *badge = attention ? VBadge(state, VAttention(), VAttentionBackground())
+                                  : VBadge(state, active ? VGood() : QHVSecondaryTextColor(),
+                                           active ? VGoodBackground() : QHVInnerColor());
         [titleRow addArrangedSubview:badge];
         UIView *spacer = [UIView new];
         [spacer setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
@@ -312,7 +317,7 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
     if (toggle) {
         // Never assign on/enabled/accessibility state here. The controller owns
         // confirmed file state and consent; this is the original native control.
-        toggle.onTintColor = QHVAccentColor();
+        toggle.onTintColor = active ? VGood() : QHVAccentColor();
         VNativeSwitchSize(toggle);
         [header addArrangedSubview:toggle];
     }
