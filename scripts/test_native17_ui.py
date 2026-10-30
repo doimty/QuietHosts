@@ -127,7 +127,7 @@ def without_user_actions(source):
 
 
 def check_ui(ui, components, header, dialog):
-    home = method(ui, 'render')
+    home = method(ui, 'drawHome')
     hero = function(components, 'QHVStatusCard')
     masthead = function(components, 'QHVBrandHeader')
     assert home.count('QHVStatusCard(') == 1, 'One managed-state hero, not duplicate protection panels'
@@ -174,6 +174,23 @@ def check_ui(ui, components, header, dialog):
     assert home.index('[draftCard addArrangedSubview:apply]') < home.index('[home addArrangedSubview:draftCard]')
     assert 'if (!self.draftTipDismissed && [self.draft.document[@"sources"] count] == 0)' in home
     assert 'boolForKey:@"QHGuideDismissed"' in method(ui, 'init') and 'setBool:YES forKey:@"QHGuideDismissed"' in home
+    # Rendering is scoped: only the visible page is torn down and rebuilt, the
+    # rest stay dirty until they are shown. Rebuilding all three per change was
+    # the main source of interaction stutter.
+    render_body = method(ui, 'render')
+    visible_pages = method(ui, 'renderVisiblePages')
+    assert 'for (QHPage *page in self.pages) page.needsRender = YES;' in render_body
+    assert '[page clear]' not in render_body, 'render() must not tear down pages eagerly'
+    assert 'if (!page.viewLoaded || page.view.window == nil) continue;' in visible_pages, 'Off-screen pages stay dirty'
+    assert visible_pages.count('[page clear]') == 1
+    assert 'if (page.draw) page.draw();' in visible_pages
+    assert 'page.draw = ^{' in method(ui, 'init'), 'Each page knows how to draw itself when it appears'
+    appearing = method(ui, 'viewWillAppear')
+    assert 'if (self.needsRender && self.draw) {' in appearing, 'An appearing page rebuilds itself before the first frame'
+    # Slice the implementation, not the forward declaration in the extension.
+    dispatch_start = ui.index('- (void)drawPageIndex:(NSUInteger)index {')
+    dispatch = ui[dispatch_start:ui.index('\n}\n', dispatch_start)]
+    assert '[self drawHome]' in dispatch and '[self renderRules]' in dispatch and '[self renderSettings]' in dispatch
     # Tab appearance must not tear every page down: the passive refresh is
     # silent, skips a fresh helper round trip, and rebuilds only on real change.
     passive = method(ui, 'refreshStatusPassively')
@@ -198,7 +215,7 @@ def check_ui(ui, components, header, dialog):
     assert 'openURL:url options:@{}' in method(ui, 'openProjectSupport')
     assert len(re.findall(r'\bopenProjectSupport\b', mask(ui))) == 2, 'Project browser opening is a manual row action only'
     all_rows = []
-    for name in ('render', 'renderRules', 'renderSourceDetail', 'renderSettings', 'showPreview'):
+    for name in ('drawHome', 'renderRules', 'renderSourceDetail', 'renderSettings', 'showPreview'):
         all_rows.extend(calls(method(ui, name), ('QHVRow', 'QHVCommandRow')))
     seen_commands, seen_navigation = set(), set()
     for name, args, _, _ in all_rows:
@@ -240,7 +257,7 @@ def check_ui(ui, components, header, dialog):
     assert consume.index('self.shouldRestoreOffset = NO') < consume.index('setContentOffset:offset'), 'Consume once before offset may trigger another layout'
     preview = method(ui, 'showPreview')
     assert preview.count('QHVFormRow(') == 10 and 'completion:confirm' in preview and '[weak finishBusy]' in preview
-    for name in ('render', 'renderRules', 'renderSettings', 'renderSourceDetail'):
+    for name in ('drawHome', 'renderRules', 'renderSettings', 'renderSourceDetail'):
         automatic = mask(without_user_actions(method(ui, name)))
         assert not re.search(r'\b(?:QHBridge|downloadURL|startURLString|refreshSources|prepareApply|prepareHelperCommand|openURL|commitPreview|commitCandidate)\b', automatic), 'Implicit operation during rendering: ' + name
     for name in ('init', 'start', 'refreshStatus', 'applyThemeToWindow'):
@@ -337,6 +354,10 @@ def main():
     check_frozen(sources['ui'])
     mutations = [
         ('ui', 'QHVStatusCard(', 'OldStatusCard('),
+        ('ui', 'if (!page.viewLoaded || page.view.window == nil) continue;', ''),
+        ('ui', 'for (QHPage *page in self.pages) page.needsRender = YES;',
+         'for (QHPage *page in self.pages) page.needsRender = NO;'),
+        ('ui', 'page.draw = ^{', 'page.appeared = ^{'),
         ('ui', '[self.scrollView setNeedsLayout];', '[self.scrollView layoutIfNeeded];'),
         ('ui', 'preferredWidth.priority = 999;', 'preferredWidth.priority = UILayoutPriorityDefaultHigh;'),
         ('ui', 'if (!self.shouldRestoreOffset) self.rememberedOffset = self.scrollView.contentOffset;', 'self.rememberedOffset = self.scrollView.contentOffset;'),

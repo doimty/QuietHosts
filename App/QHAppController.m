@@ -85,6 +85,9 @@ static BOOL Animate(void) {
 @property(nonatomic, strong) UIScrollView *scrollView;
 @property(nonatomic) CGPoint rememberedOffset;
 @property(nonatomic) BOOL shouldRestoreOffset;
+@property(nonatomic) BOOL needsRender;
+@property(nonatomic, copy) void (^draw)(void);
+@property(nonatomic, copy) void (^willAppear)(void);
 @property(nonatomic, copy) void (^appeared)(void);
 - (void)clear;
 - (void)restoreScrollPosition;
@@ -128,6 +131,20 @@ static BOOL Animate(void) {
         [self.stack.widthAnchor constraintLessThanOrEqualToConstant:680],
         preferredWidth
     ]];
+}
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    // Draw a stale page here: it may not be attached to a window yet, so the
+    // controller's visible-page pass cannot reach it.
+    if (self.needsRender && self.draw) {
+        self.needsRender = NO;
+        [self clear];
+        self.draw();
+        [self restoreScrollPosition];
+    }
+    if (self.willAppear) {
+        self.willAppear();
+    }
 }
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
@@ -252,6 +269,9 @@ static BOOL Animate(void) {
 @property(nonatomic) int notificationToken;
 @property(nonatomic) BOOL observing;
 - (void)refreshStatusPassively;
+- (void)renderVisiblePages;
+- (void)drawPageIndex:(NSUInteger)index;
+- (void)drawHome;
 @end
 
 @implementation QHAppController {
@@ -285,8 +305,12 @@ static BOOL Animate(void) {
         for (NSUInteger i = 0; i < 3; i++) {
             QHPage *page = [QHPage new];
             page.title = titles[i];
+            NSUInteger pageIndex = i;
             page.appeared = ^{
                 [weak refreshStatusPassively];
+            };
+            page.draw = ^{
+                [weak drawPageIndex:pageIndex];
             };
             UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:page];
             nav.navigationBar.prefersLargeTitles = i != 0;
@@ -467,7 +491,28 @@ static BOOL Animate(void) {
     return NO;
 }
 - (void)render {
-    for (QHPage *page in self.pages) [page clear];
+    // Mark every page stale; only the visible one is rebuilt now. Rebuilding all
+    // three on each state change tripled the work and made interactions stutter.
+    for (QHPage *page in self.pages) page.needsRender = YES;
+    [self renderVisiblePages];
+}
+- (void)renderVisiblePages {
+    for (QHPage *page in self.pages) {
+        if (!page.needsRender) continue;
+        if (!page.viewLoaded || page.view.window == nil) continue; // stays dirty
+        page.needsRender = NO;
+        [page clear];
+        if (page.draw) page.draw();
+        [page restoreScrollPosition];
+    }
+    [self renderSourceDetail];
+}
+- (void)drawPageIndex:(NSUInteger)index {
+    if (index == 0) [self drawHome];
+    else if (index == 1) [self renderRules];
+    else [self renderSettings];
+}
+- (void)drawHome {
     __weak typeof(self) weak = self;
     UIStackView *home = self.pages[0].stack;
     BOOL writable = [self statusWritable:self.status];
@@ -571,10 +616,6 @@ static BOOL Animate(void) {
         @"info.circle", nil, NO, !self.busy, ^{ [weak showDiagnostics:YES]; })];
     [home addArrangedSubview:actions];
     if (self.busy) [home addArrangedSubview:Label(QHL(@"Working…"), UIFontTextStyleFootnote, YES)];
-    [self renderRules];
-    [self renderSettings];
-    [self renderSourceDetail];
-    for (QHPage *page in self.pages) [page restoreScrollPosition];
 }
 - (NSString *)sourceKind:(NSDictionary *)source {
     return [source[@"kind"] isEqual:@"url"] ? QHL(@"HTTPS source · manual refresh") :

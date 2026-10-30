@@ -18,7 +18,7 @@ def segment(ui, start, end):
 
 
 def check(ui):
-    home = segment(ui, '- (void)render {', '- (NSString *)sourceKind:')
+    home = segment(ui, '- (void)drawHome {', '- (NSString *)sourceKind:')
     for required in (
         'QHVBrandHeader(', 'QHVStatusCard(', 'QHVStats(',
         'mainSwitch.enabled = !self.busy && (active || inactive)',
