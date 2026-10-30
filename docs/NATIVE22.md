@@ -21,6 +21,7 @@ RootHide 启动时会把 `/etc` 重新镜像回 bootstrap 原始快照。我们�
 实现要点：
 
 - `QHTransaction.targetReverted` 仅在上述第二种情形置位；其余路径不变。
+- 判定只比**类型 + 链接文本（或内容哈希）**，不比 inode/mtime：真实重启会重建符号链接，inode 与时间戳必然变化；用全指纹比较会让每次重启继续误判成篡改（首轮 CI 已实证）。
 - `transact:` 的「已 active 且快照相同则跳过」增加 `&& !targetReverted`，否则重新应用会假成功而不写盘。
 - `response` 在还原时把 state 报为 `inactive`（文件真相），并附 `reverted:YES`；**持久化状态不在此写入**。
 - `state.original` 保持不变，因此之后 `disable` 仍能恢复真正的原始镜像。
@@ -30,7 +31,7 @@ RootHide 启动时会把 `/etc` 重新镜像回 bootstrap 原始快照。我们�
 `Helper/QHFileManager.m` 在 `Tests/Native9Frozen.json` 与 `Tests/RootHidePlatformFrozen.json` 中是字节冻结基线。本次改动无法绕开，两个清单中该文件的摘要同步刷新：
 
 - 旧：`e1a6a1555b9420785f7facfb2c3ba0eb7514dbf7dfb19eeaf04a6394d9695d6e`
-- 新：`6da5927a1d9ea747943b34546961d8f35a24820dd867f05474c90962837e8901`
+- 新：`58de8e3afe5da9441a2c62e11b0430c909e698ee3801763daa5efc13fa36be11`
 
 其余 6 个受冻结文件未变。`test_platform_freeze.py` 仍验证投影一致性与 7 个变异拒绝；其输出文案改为「与已审阅清单一致」，不再声称哈希未变。
 

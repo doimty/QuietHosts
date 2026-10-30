@@ -413,6 +413,25 @@ static BOOL SamePersistedTarget(NSDictionary *current, NSDictionary *persisted) 
     [saved removeObjectForKey:@"dev"];
     return [live isEqual:saved];
 }
+/* A restart rebuilds the mirror: same kind and same link text (or content) but
+ * a fresh inode and modification time. Requiring the full persisted fingerprint
+ * here would keep treating every real reboot as tampering, so compare only the
+ * identity that actually survives: kind plus exact link text or content hash. */
+static BOOL SameRestorableOriginal(NSDictionary *current, NSDictionary *original) {
+    if (![current isKindOfClass:NSDictionary.class] || ![original isKindOfClass:NSDictionary.class] ||
+        ![current[@"kind"] isEqual:original[@"kind"]]) {
+        return NO;
+    }
+    if ([current[@"kind"] isEqual:@"symlink"]) {
+        return [current[@"text"] isKindOfClass:NSString.class] &&
+               [current[@"text"] isEqual:original[@"text"]];
+    }
+    if ([current[@"kind"] isEqual:@"regular"]) {
+        return [current[@"hash"] isKindOfClass:NSString.class] &&
+               [current[@"hash"] isEqual:original[@"hash"]];
+    }
+    return [current[@"kind"] isEqual:@"missing"];
+}
 static void ValidateState(id s) {
     if (!Keys(s,
               @[
@@ -1180,7 +1199,7 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
          * original we recorded before takeover, and the recorded rules are still
          * marked active. Anything else stays a refusal. */
         BOOL restoredBySystem = [_state[@"active"] boolValue] &&
-                                SamePersistedTarget(_target, _state[@"original"]);
+                                SameRestorableOriginal(_target, _state[@"original"]);
         if (!restoredBySystem) {
             Fail(@"target-conflict");
         }
