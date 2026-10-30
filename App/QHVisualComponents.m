@@ -266,6 +266,12 @@ UIView *QHVBadge(NSString *text, BOOL positive) {
     return VBadge(text, positive ? VGood() : QHVSecondaryTextColor(),
                    positive ? VGoodBackground() : QHVInnerColor());
 }
+/* Sits on the page background, where the inset fill was indistinguishable from
+ * the lavender surface in light mode. A card-colored pill keeps the chip
+ * readable against both the page and the hero card behind it. */
+static UIView *VMastheadChip(NSString *text) {
+    return VBadge(text, QHVSecondaryTextColor(), QHVCardColor());
+}
 static void VNativeSwitchSize(UISwitch *toggle) {
     [toggle setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [toggle setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
@@ -273,6 +279,8 @@ static void VNativeSwitchSize(UISwitch *toggle) {
     [toggle setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisVertical];
 }
 UIView *QHVBrandHeader(NSString *title, NSString *state, BOOL positive, NSString *subtitle) {
+    /* The masthead no longer carries a status color: the hero below owns it. */
+    (void)positive;
     QHVFlexibleStack *masthead = VFlow(300);
     masthead.accessibilityIdentifier = @"qh.brand.header";
     masthead.layoutMarginsRelativeArrangement = YES;
@@ -285,7 +293,7 @@ UIView *QHVBrandHeader(NSString *title, NSString *state, BOOL positive, NSString
     if (subtitle.length) [text addArrangedSubview:VTypeLabel(subtitle, UIFontTextStyleSubheadline, 14, UIFontWeightRegular, YES)];
     [masthead addArrangedSubview:text];
     [text.widthAnchor constraintLessThanOrEqualToAnchor:masthead.layoutMarginsGuide.widthAnchor].active = YES;
-    if (state.length) [masthead addArrangedSubview:QHVBadge(state, positive)];
+    if (state.length) [masthead addArrangedSubview:VMastheadChip(state)];
     return masthead;
 }
 UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,

@@ -133,6 +133,11 @@ def check_ui(ui, components, header, dialog):
     assert home.count('QHVStatusCard(') == 1, 'One managed-state hero, not duplicate protection panels'
     assert 'VFlow(' in masthead and 'QHVCard(' not in masthead and 'QHVIconTile(' not in masthead, 'Brand header is a light masthead'
     assert 'qh.brand.header' in masthead
+    # The masthead chip must sit on a card-colored fill: the inset fill was
+    # invisible against the light page background.
+    chip = function(components, 'VMastheadChip')
+    assert 'QHVCardColor()' in chip, 'Masthead chip needs a visible surface'
+    assert '[masthead addArrangedSubview:VMastheadChip(state)]' in masthead
     for required in ('QHVStatusCard(', 'QHVCommandRow(', 'QHVRow('):
         assert required in header, required
     for required in ('card.surfaceStyle = QHVSurfaceStyleHero', 'card.accessibilityIdentifier = @"qh.managed.card"',
@@ -354,6 +359,8 @@ def main():
     check_frozen(sources['ui'])
     mutations = [
         ('ui', 'QHVStatusCard(', 'OldStatusCard('),
+        ('components', 'return VBadge(text, QHVSecondaryTextColor(), QHVCardColor());',
+         'return VBadge(text, QHVSecondaryTextColor(), QHVInnerColor());'),
         ('ui', 'if (!page.viewLoaded || page.view.window == nil) continue;', ''),
         ('ui', 'for (QHPage *page in self.pages) page.needsRender = YES;',
          'for (QHPage *page in self.pages) page.needsRender = NO;'),
