@@ -266,12 +266,6 @@ UIView *QHVBadge(NSString *text, BOOL positive) {
     return VBadge(text, positive ? VGood() : QHVSecondaryTextColor(),
                    positive ? VGoodBackground() : QHVInnerColor());
 }
-/* Sits on the page background, where the inset fill was indistinguishable from
- * the lavender surface in light mode. A card-colored pill keeps the chip
- * readable against both the page and the hero card behind it. */
-static UIView *VMastheadChip(NSString *text) {
-    return VBadge(text, QHVSecondaryTextColor(), QHVCardColor());
-}
 static void VNativeSwitchSize(UISwitch *toggle) {
     [toggle setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [toggle setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
@@ -279,34 +273,19 @@ static void VNativeSwitchSize(UISwitch *toggle) {
     [toggle setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisVertical];
 }
 UIView *QHVBrandHeader(NSString *title, NSString *state, BOOL positive, NSString *subtitle) {
-    /* The masthead no longer carries a status color: the hero below owns it. */
+    /* A trailing pill kept being stretched by the flexible stack, and its inset
+     * fill was invisible on the light page. A plain tagline is legible in both
+     * appearances and has no intrinsic-size arbitration to get wrong. */
     (void)positive;
     UIStackView *text = VStack();
     UILabel *brand = VTypeLabel(title, UIFontTextStyleTitle1, 27, UIFontWeightBold, NO);
     brand.textColor = QHVAccentColor();
     brand.accessibilityTraits |= UIAccessibilityTraitHeader;
     [text addArrangedSubview:brand];
-    if (subtitle.length || state.length) {
-        /* Tag sits beside the subtitle instead of floating at the trailing edge,
-         * where the flexible stack stretched it into a full-width bar. */
-        QHVFlexibleStack *tagline = VFlow(220);
-        tagline.spacing = 8;
-        if (subtitle.length) {
-            UILabel *line = VTypeLabel(subtitle, UIFontTextStyleSubheadline, 14, UIFontWeightRegular, YES);
-            [line setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
-                                                  forAxis:UILayoutConstraintAxisHorizontal];
-            [tagline addArrangedSubview:line];
-        }
-        if (state.length) {
-            UIView *chip = VMastheadChip(state);
-            [chip setContentHuggingPriority:999 forAxis:UILayoutConstraintAxisHorizontal];
-            [chip setContentCompressionResistancePriority:UILayoutPriorityRequired
-                                                  forAxis:UILayoutConstraintAxisHorizontal];
-            [tagline addArrangedSubview:chip];
-        }
-        [text addArrangedSubview:tagline];
-        [tagline.widthAnchor constraintLessThanOrEqualToAnchor:text.widthAnchor].active = YES;
-    }
+    NSString *tagline = subtitle.length && state.length
+        ? [NSString stringWithFormat:@"%@ · %@", subtitle, state]
+        : (subtitle.length ? subtitle : state);
+    if (tagline.length) [text addArrangedSubview:VTypeLabel(tagline, UIFontTextStyleSubheadline, 14, UIFontWeightRegular, YES)];
     [text.widthAnchor constraintLessThanOrEqualToConstant:680].active = YES;
     return text;
 }

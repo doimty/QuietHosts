@@ -131,15 +131,10 @@ def check_ui(ui, components, header, dialog):
     hero = function(components, 'QHVStatusCard')
     masthead = function(components, 'QHVBrandHeader')
     assert home.count('QHVStatusCard(') == 1, 'One managed-state hero, not duplicate protection panels'
-    assert 'VFlow(' in masthead and 'QHVCard(' not in masthead and 'QHVIconTile(' not in masthead, 'Brand header is a light masthead'
-    # The masthead chip must sit on a card-colored fill and stay intrinsic:
-    # the inset fill was invisible in light mode, and the trailing placement
-    # stretched it into a full-width bar.
-    chip = function(components, 'VMastheadChip')
-    assert 'QHVCardColor()' in chip, 'Masthead chip needs a visible surface'
-    assert '[tagline addArrangedSubview:chip]' in masthead, 'Chip belongs beside the subtitle'
-    assert 'QHVFlexibleStack *tagline = VFlow(220);' in masthead
-    assert '[chip setContentHuggingPriority:999 forAxis:UILayoutConstraintAxisHorizontal];' in masthead
+    assert 'VStack()' in masthead and 'QHVCard(' not in masthead and 'QHVIconTile(' not in masthead, 'Brand header is a light masthead'
+    # The tag is part of the tagline text: no pill to stretch or lose contrast.
+    assert '[NSString stringWithFormat:@"%@ · %@", subtitle, state]' in masthead, 'State joins the tagline'
+    assert 'VMastheadChip' not in components and 'QHVBadge(state' not in masthead
     for required in ('QHVStatusCard(', 'QHVCommandRow(', 'QHVRow('):
         assert required in header, required
     for required in ('card.surfaceStyle = QHVSurfaceStyleHero', 'card.accessibilityIdentifier = @"qh.managed.card"',
@@ -361,8 +356,7 @@ def main():
     check_frozen(sources['ui'])
     mutations = [
         ('ui', 'QHVStatusCard(', 'OldStatusCard('),
-        ('components', 'return VBadge(text, QHVSecondaryTextColor(), QHVCardColor());',
-         'return VBadge(text, QHVSecondaryTextColor(), QHVInnerColor());'),
+        ('components', '[NSString stringWithFormat:@"%@ · %@", subtitle, state]', 'subtitle'),
         ('ui', 'if (!page.viewLoaded || page.view.window == nil) continue;', ''),
         ('ui', 'for (QHPage *page in self.pages) page.needsRender = YES;',
          'for (QHPage *page in self.pages) page.needsRender = NO;'),
