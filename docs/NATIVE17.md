@@ -55,3 +55,11 @@ Windows 只运行可用的 source/portable fixtures，不能拿不支持 setuid 
 - 另上传 UI screenshot/report 证据；run、attempt、source commit、Xcode、SHA 一起记录。
 - 产物：`com.doimty.quiethosts_0.1.0-1+native17_iphoneos-arm64e.deb` / `..._iphoneos-arm64.deb`。
 - `Section: Applications`；正式 Havoc 发售需另确认版本/设备证据与 [上架清单](HAVOC_READINESS.md)。漂亮界面不是兼容或销量承诺。
+
+## 首轮云反馈与定位
+
+Run `40975496685` / commit `7b0c1ff` 的源测试、模拟器编译、签名与 bootstatus 通过，但 `simctl launch --console` 在 600 秒后超时，未获得有效进度输出；build 被严格前置门禁跳过。空日志不能证明 App 没启动，也不能把失败归因于 rootless。
+
+审查发现新增主动滚动恢复会对尚未挂载、可能零宽的页面同步 `layoutIfNeeded`。修订改为 pending offset：保留未消费偏移，等 scroll 自身正常布局结束、已挂载且尺寸有效，再先清标志后设置不同的偏移；不再同步排版离屏页。新增负例防止重新引入同步布局或重复覆盖偏移。
+
+测试 App 增加 main/初始化/显示窗口/各布局阶段的 stderr 与 Documents 进度记录；driver 超时仍报失败，但也保留部分 PNG/JSON/进度与仅匹配 `QHVisualSmoke` 的进程采样。600 秒预算、18 组件/108 controller/18 live 字体变更/5 取消/10 截图、原生开关与零写入/零下载等门禁全部保留。修订效果需由后续真实 CI 证据确认，不能以源码推断代替。

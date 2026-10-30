@@ -8,6 +8,7 @@
 #import "../Shared/QHBridge.h"
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 // CI-only, isolated simulator fixture. Neither the real helper nor the network
 // is invoked. These counters become evidence only when this executable runs.
@@ -15,6 +16,14 @@ static NSUInteger Requests = 0, Writes = 0, Downloads = 0, Checks = 0, Failures 
 static NSUInteger ComponentFixtures = 0, ControllerCases = 0, NativeSwitchChecks = 0;
 static NSUInteger ControllerLiveTransitions = 0, ConsentCancellations = 0, Screenshots = 0;
 static NSDictionary *BridgeStatusOverride = nil;
+// Diagnostic-only markers in this disposable test app, never the product app.
+// Persist before writing stderr so a stalled simctl console cannot erase the
+// last completed stage from a timeout artifact.
+static FILE *ProgressFile = NULL;
+static void QHSmokeProgress(const char *stage) {
+    if (ProgressFile) { fprintf(ProgressFile,"%s\n",stage);fflush(ProgressFile); }
+    fprintf(stderr,"QH_UI_PROGRESS %s\n",stage);fflush(stderr);
+}
 extern void QHRunDialogSmoke(QHAppController *,void (^)(NSUInteger,NSUInteger));
 static NSDictionary *DefaultStatus(void) {
     return @{ @"ok":@YES, @"state":@"active", @"revision":@"537A11EE-1ED7-4719-9489-114078092E26",
@@ -166,8 +175,15 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
 @implementation SmokeDelegate
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
     (void)application;(void)options;
+    QHSmokeProgress("didFinishLaunching-enter");
+    NSString *diagnosticDocuments=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
+    [NSFileManager.defaultManager createDirectoryAtPath:diagnosticDocuments withIntermediateDirectories:YES attributes:nil error:NULL];
+    ProgressFile=fopen([[diagnosticDocuments stringByAppendingPathComponent:@"native17-progress.txt"] fileSystemRepresentation],"a");
+    Check(ProgressFile!=NULL,@"isolated UI fixture progress file can be written");
+    QHSmokeProgress("fixture-output-ready");
     [UIView setAnimationsEnabled:NO];
     InstallDownloadGuard();
+    QHSmokeProgress("download-guard-installed");
     NSError *error=nil;
     NSURL *directory=[NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString] isDirectory:YES];
     QHStore *store=[[QHStore alloc] initWithDirectory:directory];
@@ -180,18 +196,26 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
     Check(self.preview!=nil,error.localizedDescription ?: @"preview generated");
     Check(self.preview.compiled.domains.count==2,@"actual compiled count");
     Check(self.emptyPreview!=nil && self.emptyPreview.compiled.domains.count==0,@"actual empty prospective draft");
+    QHSmokeProgress("store-fixture-loaded");
+    QHSmokeProgress("controller-init-start");
     self.controller=[QHAppController new];
+    QHSmokeProgress("controller-init-finished");
     [self.controller setValue:store forKey:@"store"];
     [self.controller setValue:self.preview forKey:@"draft"];
     [self.controller setValue:DefaultStatus() forKey:@"status"];
     self.window=[[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
     self.window.rootViewController=self.controller.rootController;
+    QHSmokeProgress("window-make-visible-start");
     [self.window makeKeyAndVisible];
+    QHSmokeProgress("window-make-visible-finished");
+    QHSmokeProgress("initial-render-start");
     [self.controller render];
+    QHSmokeProgress("initial-render-finished");
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{ [self runFixtures]; });
     return YES;
 }
 - (void)runFixtures {
+    QHSmokeProgress("component-fixtures-start");
     // Preserve all 18 original fixtures, including the 320pt regression width.
     NSArray *categories=@[UIContentSizeCategoryLarge,UIContentSizeCategoryExtraExtraExtraLarge,UIContentSizeCategoryAccessibilityExtraExtraExtraLarge];
     for (NSNumber *style in @[@(UIUserInterfaceStyleLight),@(UIUserInterfaceStyleDark)])
@@ -232,12 +256,14 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
             @"Managed domains",nil,unknownSwitch,NO,YES);
         [stack addArrangedSubview:withCount];
         [stack addArrangedSubview:withoutCount];
+        QHSmokeProgress([[NSString stringWithFormat:@"component-layout-start width=%@ style=%@ category=%@",width,style,category] UTF8String]);
         [child.view setNeedsLayout];
         for (NSUInteger pass=0;pass<3;pass++) {
             [fixtureWindow layoutIfNeeded];
             [child.view layoutIfNeeded];
             [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:.01]];
         }
+        QHSmokeProgress([[NSString stringWithFormat:@"component-layout-finished width=%@ style=%@ category=%@",width,style,category] UTF8String]);
         UIStackView *stats=(UIStackView *)stack.arrangedSubviews[2];
         NSLog(@"QH_TRAIT width=%@ requested=%@ child=%@ stats=%@ axis=%ld frame=%@ window=%d",width,category,
             child.view.traitCollection.preferredContentSizeCategory,stats.traitCollection.preferredContentSizeCategory,
@@ -267,6 +293,7 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
             // no fabricated category notification and no recreation of labels.
             CGFloat normalFont=0;
             for (NSString *next in @[UIContentSizeCategoryLarge,UIContentSizeCategoryAccessibilityExtraExtraExtraLarge,UIContentSizeCategoryLarge]) {
+                QHSmokeProgress([[NSString stringWithFormat:@"component-live-start width=%@ style=%@ category=%@",width,style,next] UTF8String]);
                 child.traitOverrides.preferredContentSizeCategory=next;
                 for (NSUInteger pass=0;pass<3;pass++) {
                     [fixtureWindow layoutIfNeeded];
@@ -288,6 +315,7 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
                 Geometry(stack);
             }
         }
+        QHSmokeProgress([[NSString stringWithFormat:@"component-finished width=%@ style=%@ category=%@",width,style,category] UTF8String]);
         ComponentFixtures++;
         fixtureWindow.hidden=YES;
         fixtureWindow.rootViewController=nil;
@@ -307,6 +335,7 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
     [self runConsentProbes:0 completion:^{ [self snapshotControllerPages]; }];
 }
 - (void)runControllerMatrix {
+    QHSmokeProgress("controller-matrix-start");
     // Real controller live DT321/375/428 matrix; the original DT320 component
     // fixtures above remain intact. Width is the actual window, not a model.
     NSDictionary *savedStatus=[self.controller valueForKey:@"status"];
@@ -330,6 +359,7 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
         for (NSDictionary *fixture in states) for (id countValue in @[@42,NSNull.null,@"42"]) {
             NSMutableDictionary *status=[@{@"state":fixture[@"state"],@"ok":fixture[@"ok"],@"revision":@"mock-revision"} mutableCopy];
             if (countValue!=NSNull.null) status[@"domainCount"]=countValue;
+            QHSmokeProgress([[NSString stringWithFormat:@"controller-case-start width=%@ style=%@ state=%@ count=%@",width,style,fixture[@"state"],countValue] UTF8String]);
             [self.controller setValue:status forKey:@"status"];
             [self.controller setValue:fixture[@"busy"] forKey:@"busy"];
             [self.controller render];
@@ -348,6 +378,7 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
             UIView *draft=FindID(home,@"qh.draft.card"), *apply=FindID(home,@"qh.draft.apply");
             Check(ContainsView(draft,apply) && !ContainsView(hero,apply),@"real Preview and apply CTA belongs inside the draft card, never the managed hero");
             Geometry((UIStackView *)[homeNav.topViewController valueForKey:@"stack"]);
+            QHSmokeProgress([[NSString stringWithFormat:@"controller-case-finished width=%@ style=%@ state=%@",width,style,fixture[@"state"]] UTF8String]);
             ControllerCases++;
         }
         [self.controller setValue:@NO forKey:@"busy"];
@@ -388,6 +419,7 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
     LayoutWindow(self.window);
 }
 - (void)runDraftProofFixtures {
+    QHSmokeProgress("draft-proof-fixtures-start");
     NSDictionary *savedStatus=[self.controller valueForKey:@"status"];
     id savedLocal=[self.controller valueForKey:@"appliedLocalRevision"];
     id savedHelper=[self.controller valueForKey:@"appliedHelperRevision"];
@@ -438,6 +470,7 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
     [self.controller render];
 }
 - (void)runConsentProbes:(NSUInteger)stage completion:(void (^)(void))completion {
+    QHSmokeProgress([[NSString stringWithFormat:@"consent-stage=%lu",(unsigned long)stage] UTF8String]);
     if (stage>=5) {
         BridgeStatusOverride=nil;
         [self.controller setValue:self.preview forKey:@"draft"];
@@ -502,6 +535,7 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
     });
 }
 - (void)snapshotControllerPages {
+    QHSmokeProgress("controller-screenshots-start");
     // Snapshot actual controller pages in both appearances. Preserve every old
     // page-{i}.png/source-detail.png/preview.png filename as the light capture.
     NSString *documents=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
@@ -514,6 +548,7 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
             LayoutWindow(self.window);
             Check(CountClass(self.controller.rootController.selectedViewController.view,UILabel.class)>3,@"real controller rendered");
             Check(self.controller.rootController.selectedViewController.view.traitCollection.userInterfaceStyle==(UIUserInterfaceStyle)style.integerValue,@"actual page screenshot inherits requested appearance");
+            QHSmokeProgress([[NSString stringWithFormat:@"page-screenshot index=%lu dark=%d",(unsigned long)index,dark] UTF8String]);
             Screenshot(self.window,documents,[NSString stringWithFormat:dark ? @"page-%lu-dark.png" : @"page-%lu.png",(unsigned long)index]);
         }
         self.controller.rootController.selectedIndex=1;
@@ -538,7 +573,9 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
         Check(Writes==0,@"no file/DNS commands and no implicit confirmation");
         Check(Downloads==0,@"no implicit source download across rendering, navigation, appearance, consent or cancel");
         [self.controller.rootController dismissViewControllerAnimated:NO completion:^{
+            QHSmokeProgress("dialog-smoke-start");
             QHRunDialogSmoke(self.controller,^(NSUInteger dialogChecks,NSUInteger dialogFailures) {
+                QHSmokeProgress("dialog-smoke-finished");
                 Checks+=dialogChecks;Failures+=dialogFailures;
                 Check(Writes==0,@"dialog flows never send write/reload or implicit consent");
                 Check(Downloads==0,@"dialog cancel and invalid-input flows never start a download");
@@ -558,5 +595,8 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
 }
 @end
 int main(int argc,char **argv) {
-    @autoreleasepool { return UIApplicationMain(argc,argv,nil,NSStringFromClass(SmokeDelegate.class)); }
+    @autoreleasepool {
+        QHSmokeProgress("UIApplicationMain-enter");
+        return UIApplicationMain(argc,argv,nil,NSStringFromClass(SmokeDelegate.class));
+    }
 }

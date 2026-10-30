@@ -7,6 +7,28 @@ def run(*args):
     subprocess.run(args,check=True,cwd=ROOT)
 def read(*args):
     return subprocess.check_output(args,cwd=ROOT,text=True)
+def harvest_partial_evidence(container):
+    errors=[]
+    for file in (container/'Documents').glob('*'):
+        if file.is_file() and not file.is_symlink() and file.suffix in ('.json','.png','.txt','.log'):
+            try:shutil.copyfile(file,OUT/('visual-'+file.name))
+            except OSError as error:errors.append({'file':file.name,'error':str(error)})
+    if errors:(OUT/'visual-harvest-errors.json').write_text(json.dumps(errors,indent=2))
+def sample_owned_ui_fixture():
+    # Host-side diagnostics for only this disposable simulator executable.
+    # Never sample a device/helper or a different application process.
+    info={'scope':'owned QHVisualSmoke timeout diagnostics only','pids':[]}
+    try:
+        found=subprocess.run(['pgrep','-x','QHVisualSmoke'],capture_output=True,text=True,timeout=10)
+        pids=[line.strip() for line in found.stdout.splitlines() if line.strip().isdigit()]
+        info['pids']=pids
+        if len(pids)==1:
+            sampled=subprocess.run(['sample',pids[0],'3','1','-file',str(OUT/'visual-timeout-sample.txt')],capture_output=True,text=True,timeout=20)
+            info['sample_returncode']=sampled.returncode
+            info['diagnostic']=sampled.stdout+'\n'+sampled.stderr
+        else:info['diagnostic']='No unique owned UI fixture PID was available.'
+    except Exception as error:info['diagnostic']=str(error)
+    (OUT/'visual-timeout-process.json').write_text(json.dumps(info,indent=2))
 if os.environ.get('GITHUB_ACTIONS')!='true':
     raise SystemExit('Visual smoke is restricted to disposable GitHub Actions macOS CI.')
 with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
@@ -21,9 +43,12 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
     run('xcrun','--sdk','iphonesimulator','clang','-isysroot',sdk,'-arch',arch,'-mios-simulator-version-min=15.0','-fobjc-arc','-fblocks','-DQH_TESTING=1','-D_DARWIN_C_SOURCE','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-Werror=unguarded-availability','-framework','UIKit','-framework','Foundation','-framework','QuartzCore','-framework','CoreGraphics','-framework','UniformTypeIdentifiers',*sources,'-o',str(app/'QHVisualSmoke'))
     run('codesign','--force','--sign','-',str(app))
     devices=json.loads(read('xcrun','simctl','list','devices','available','--json'))['devices']
-    candidates=[d for runtime,ds in devices.items() if 'iOS' in runtime for d in ds if d.get('isAvailable') and 'iPhone' in d['name']]
+    candidates=[dict(d,runtime=runtime) for runtime,ds in devices.items() if 'iOS' in runtime for d in ds if d.get('isAvailable') and 'iPhone' in d['name']]
     if not candidates:raise SystemExit('No available iPhone simulator: smoke cannot be counted as pass.')
     identifier=candidates[0]['udid']
+    (OUT/'visual-environment.json').write_text(json.dumps({'device':candidates[0],'host_arch':arch,'sdk':sdk,'scope':'disposable simulator, not target device'},indent=2))
+    help_output=subprocess.run(['xcrun','simctl','help','launch'],capture_output=True,text=True,timeout=30)
+    (OUT/'visual-launch-help.txt').write_text(help_output.stdout+'\n'+help_output.stderr)
     if candidates[0]['state']!='Booted':run('xcrun','simctl','boot',identifier)
     run('xcrun','simctl','bootstatus',identifier,'-b')
     run('xcrun','simctl','install',identifier,str(app))
@@ -64,15 +89,16 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
         logs=text(error.stdout)+'\n'+text(error.stderr)
         (OUT/'visual-smoke-console.txt').write_text(logs)
         print(logs,flush=True)
+        sample_owned_ui_fixture()
         raise
     finally:
         stop.set();capture.join(timeout=25)
+        # A failed/timeout launch must retain the last progress, partial PNGs,
+        # JSON and diagnostic files. Missing result still fails the gates below.
+        harvest_partial_evidence(container)
     logs=launch.stdout+'\n'+launch.stderr
     (OUT/'visual-smoke-console.txt').write_text(logs)
     print(logs)
-    container=Path(read('xcrun','simctl','get_app_container',identifier,info['CFBundleIdentifier'],'data').strip())
-    for file in (container/'Documents').glob('*'):
-        if file.suffix in ('.json','.png'):shutil.copyfile(file,OUT/('visual-'+file.name))
     report=json.loads((OUT/'visual-result.json').read_text())
     assert launch.returncode==0 and report['failures']==0 and report['writes']==0,report
     assert not capture_errors and (OUT/'visual-software-keyboard-screen.png').is_file(), ('Complete keyboard screenshot missing',capture_errors)

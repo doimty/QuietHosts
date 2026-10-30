@@ -70,20 +70,34 @@ static BOOL Animate(void) {
     return !UIAccessibilityIsReduceMotionEnabled();
 }
 
+@interface QHPageScrollView : UIScrollView
+@property(nonatomic, copy) void (^contentDidLayout)(void);
+@end
+@implementation QHPageScrollView
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    if (self.contentDidLayout) self.contentDidLayout();
+}
+@end
+
 @interface QHPage : UIViewController
 @property(nonatomic, strong) UIStackView *stack;
 @property(nonatomic, strong) UIScrollView *scrollView;
 @property(nonatomic) CGPoint rememberedOffset;
+@property(nonatomic) BOOL shouldRestoreOffset;
 @property(nonatomic, copy) void (^appeared)(void);
 - (void)clear;
 - (void)restoreScrollPosition;
+- (void)finishScrollRestore;
 @end
 @implementation QHPage
 - (void)loadView {
     self.view = [UIView new];
     self.view.backgroundColor = Background();
-    UIScrollView *scroll = [UIScrollView new];
+    QHPageScrollView *scroll = [QHPageScrollView new];
     self.scrollView = scroll;
+    __weak typeof(self) weak = self;
+    scroll.contentDidLayout = ^{ [weak finishScrollRestore]; };
     scroll.translatesAutoresizingMaskIntoConstraints = NO;
     scroll.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
     scroll.alwaysBounceVertical = YES;
@@ -121,21 +135,32 @@ static BOOL Animate(void) {
 }
 - (void)clear {
     [self loadViewIfNeeded];
-    self.rememberedOffset = self.scrollView.contentOffset;
+    if (!self.shouldRestoreOffset) self.rememberedOffset = self.scrollView.contentOffset;
+    self.shouldRestoreOffset = YES;
     for (UIView *view in self.stack.arrangedSubviews) {
         [view removeFromSuperview];
     }
 }
 - (void)restoreScrollPosition {
-    [self.view layoutIfNeeded];
+    // Rendering also populates off-screen pages, which may still have zero
+    // bounds. Do not synchronously force their Auto Layout engine to solve a
+    // negative available width. Consume after the scroll view's own layout.
+    self.shouldRestoreOffset = YES;
+    [self.view setNeedsLayout];
+    [self.scrollView setNeedsLayout];
+}
+- (void)finishScrollRestore {
     UIScrollView *scroll = self.scrollView;
+    if (!self.shouldRestoreOffset || !self.view.window || CGRectGetWidth(scroll.bounds) <= 36 ||
+        CGRectGetHeight(scroll.bounds) <= 0 || scroll.contentSize.height <= 0) return;
+    self.shouldRestoreOffset = NO;
     CGFloat top = -scroll.adjustedContentInset.top;
     CGFloat bottom = MAX(top, scroll.contentSize.height - CGRectGetHeight(scroll.bounds)
                              + scroll.adjustedContentInset.bottom);
     CGPoint offset = self.rememberedOffset;
     offset.y = MIN(MAX(offset.y, top), bottom);
     offset.x = 0;
-    [scroll setContentOffset:offset animated:NO];
+    if (!CGPointEqualToPoint(scroll.contentOffset, offset)) [scroll setContentOffset:offset animated:NO];
 }
 @end
 

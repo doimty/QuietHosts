@@ -214,6 +214,20 @@ def check_ui(ui, components, header, dialog):
     assert 'UIFontTextStyleBody, 16, UIFontWeightSemibold' in function(components, 'VInfo')
     assert 'label.numberOfLines = 0' in function(components, 'VLabel') and 'label.adjustsFontForContentSizeCategory = YES' in function(components, 'VLabel')
     assert 'scaledFontForFont:' in function(components, 'VTypeLabel')
+    restore = method(ui, 'restoreScrollPosition')
+    clear = method(ui, 'clear')
+    consume = method(ui, 'finishScrollRestore')
+    assert 'layoutIfNeeded' not in mask(restore + consume), 'Never force off-screen or reentrant layout for scroll recovery'
+    assert '[self.scrollView setNeedsLayout]' in restore and 'self.shouldRestoreOffset = YES' in restore
+    assert 'if (!self.shouldRestoreOffset) self.rememberedOffset = self.scrollView.contentOffset;' in clear
+    assert 'self.shouldRestoreOffset = YES' in clear
+    assert 'if (self.contentDidLayout) self.contentDidLayout();' in method(ui, 'layoutSubviews')
+    assert 'scroll.contentDidLayout = ^{ [weak finishScrollRestore]; };' in method(ui, 'loadView')
+    for required in ('!self.shouldRestoreOffset', '!self.view.window', 'CGRectGetWidth(scroll.bounds) <= 36',
+                     'CGRectGetHeight(scroll.bounds) <= 0', 'scroll.contentSize.height <= 0',
+                     'self.shouldRestoreOffset = NO', 'CGPointEqualToPoint(scroll.contentOffset, offset)'):
+        assert required in consume, required
+    assert consume.index('self.shouldRestoreOffset = NO') < consume.index('setContentOffset:offset'), 'Consume once before offset may trigger another layout'
     preview = method(ui, 'showPreview')
     assert preview.count('QHVFormRow(') == 10 and 'completion:confirm' in preview and '[weak finishBusy]' in preview
     for name in ('render', 'renderRules', 'renderSettings', 'renderSourceDetail'):
@@ -313,6 +327,10 @@ def main():
     check_frozen(sources['ui'])
     mutations = [
         ('ui', 'QHVStatusCard(', 'OldStatusCard('),
+        ('ui', '[self.scrollView setNeedsLayout];', '[self.scrollView layoutIfNeeded];'),
+        ('ui', 'if (!self.shouldRestoreOffset) self.rememberedOffset = self.scrollView.contentOffset;', 'self.rememberedOffset = self.scrollView.contentOffset;'),
+        ('ui', 'if (self.contentDidLayout) self.contentDidLayout();', '[self layoutSubviews];'),
+        ('ui', 'self.shouldRestoreOffset = NO;', 'self.shouldRestoreOffset = YES;'),
         ('ui', '[draftCard addArrangedSubview:apply]', '[home addArrangedSubview:apply]'),
         ('ui', '[sender setOn:active animated:NO]', '[sender setOn:requested animated:NO]'),
         ('ui', '[self.appliedHelperRevision isEqual:self.status[@"revision"]] && active',
