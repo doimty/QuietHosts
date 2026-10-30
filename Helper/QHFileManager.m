@@ -1360,7 +1360,8 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
 - (void)reconcileRevert {
     NSMutableDictionary *next = [_state mutableCopy];
     next[@"active"] = @NO;
-    next[@"domainCount"] = @0;
+    /* Keep domainCount: it still describes the stored snapshot, and
+     * snapshotForState validates the slot against it. */
     next[@"target"] = _target;
     AtomicData(_stateFD, @"state.json", JSON(next), _owner, 0600, ^{
         [self beforeWrite:@"reconcile-revert"];

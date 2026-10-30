@@ -12,7 +12,7 @@
     "Helper/QHDNSReload.h": "a506de50bdbe59e40b66d8e95067e5854fffb22bd60f702e6e6d3d7897a42189",
     "Helper/QHDirectoryPolicy.h": "113a349005ebe84bc52676c9f25deb0aa07cc0f13149efaf6bb8f99b7240e79a",
     "Helper/QHFileManager.h": "d10beec1907519b4db92f5ea0b89c82597ae7adeaf48ef785896d9f9d08869c4",
-    "Helper/QHFileManager.m": "69fbc8e2d86e989f9f568772cd74d35cf666e46ab374e96600b618c9a1aea823",
+    "Helper/QHFileManager.m": "51777f60433a5765ec0c8ac8aaaec1c38b9f05c8576116969cfa61d99a35d927",
     "Helper/main.m": "f7c956262d37868fc3f710486872bc99b1ee717de742a6e3125d16cb1e9b0a7c",
     "Makefile": "798b4046c7cd79b96ce96e47270f21eb82b1bcaa8779505c2617c3179d258311",
     "Shared/QHBridge.h": "b22fbedc1047b8de10a17f222d91f4f6070dcf35d48fdbf12336b95749ab28c8",
