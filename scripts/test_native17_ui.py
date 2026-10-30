@@ -223,6 +223,7 @@ def check_ui(ui, components, header, dialog):
     assert 'self.shouldRestoreOffset = YES' in clear
     assert 'if (self.contentDidLayout) self.contentDidLayout();' in method(ui, 'layoutSubviews')
     assert 'scroll.contentDidLayout = ^{ [weak finishScrollRestore]; };' in method(ui, 'loadView')
+    assert 'preferredWidth.priority = 999;' in method(ui, 'loadView'), 'Viewport column must not be controlled by badge/content hugging'
     for required in ('!self.shouldRestoreOffset', '!self.view.window', 'CGRectGetWidth(scroll.bounds) <= 36',
                      'CGRectGetHeight(scroll.bounds) <= 0', 'scroll.contentSize.height <= 0',
                      'self.shouldRestoreOffset = NO', 'CGPointEqualToPoint(scroll.contentOffset, offset)'):
@@ -328,6 +329,7 @@ def main():
     mutations = [
         ('ui', 'QHVStatusCard(', 'OldStatusCard('),
         ('ui', '[self.scrollView setNeedsLayout];', '[self.scrollView layoutIfNeeded];'),
+        ('ui', 'preferredWidth.priority = 999;', 'preferredWidth.priority = UILayoutPriorityDefaultHigh;'),
         ('ui', 'if (!self.shouldRestoreOffset) self.rememberedOffset = self.scrollView.contentOffset;', 'self.rememberedOffset = self.scrollView.contentOffset;'),
         ('ui', 'if (self.contentDidLayout) self.contentDidLayout();', '[self layoutSubviews];'),
         ('ui', 'self.shouldRestoreOffset = NO;', 'self.shouldRestoreOffset = YES;'),

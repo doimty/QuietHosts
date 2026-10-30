@@ -63,3 +63,5 @@ Run `40975496685` / commit `7b0c1ff` 的源测试、模拟器编译、签名与 
 审查发现新增主动滚动恢复会对尚未挂载、可能零宽的页面同步 `layoutIfNeeded`。修订改为 pending offset：保留未消费偏移，等 scroll 自身正常布局结束、已挂载且尺寸有效，再先清标志后设置不同的偏移；不再同步排版离屏页。新增负例防止重新引入同步布局或重复覆盖偏移。
 
 测试 App 增加 main/初始化/显示窗口/各布局阶段的 stderr 与 Documents 进度记录；driver 超时仍报失败，但也保留部分 PNG/JSON/进度与仅匹配 `QHVisualSmoke` 的进程采样。600 秒预算、18 组件/108 controller/18 live 字体变更/5 取消/10 截图、原生开关与零写入/零下载等门禁全部保留。修订效果需由后续真实 CI 证据确认，不能以源码推断代替。
+
+第二轮 Run `40979468352` 的进度证实初始化/显示窗口/初始 render 均返回，但首组 fixture 尚未进入；timeout 后的进程采样也超时。继续以 test-only 的有限频率 flow/surface 布局轨迹缩小范围，并在初始 render 已返回却迟迟未开始 fixtures 时做活进程诊断。若调试器介入，即使之后产生成功 report 也不算验收通过；get-task-allow 仅用于 CI fixture，不进入产品 App/Helper。页宽偏好由 750 提高到 999，使 required 视口/最大宽度边界主导而非内容 hugging；这是低面宽度仲裁硬化，不把 750/751 差异单独宣称为已证根因。

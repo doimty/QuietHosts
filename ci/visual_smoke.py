@@ -1,6 +1,6 @@
 """Run only on disposable macOS CI. Simulator mock Bridge; no device/helper commands."""
 from pathlib import Path
-import json, os, plistlib, shutil, subprocess, tempfile, threading
+import json, os, plistlib, shutil, subprocess, tempfile, threading, time
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'build-metadata';OUT.mkdir(exist_ok=True)
 def run(*args):
@@ -14,21 +14,31 @@ def harvest_partial_evidence(container):
             try:shutil.copyfile(file,OUT/('visual-'+file.name))
             except OSError as error:errors.append({'file':file.name,'error':str(error)})
     if errors:(OUT/'visual-harvest-errors.json').write_text(json.dumps(errors,indent=2))
-def sample_owned_ui_fixture():
-    # Host-side diagnostics for only this disposable simulator executable.
-    # Never sample a device/helper or a different application process.
-    info={'scope':'owned QHVisualSmoke timeout diagnostics only','pids':[]}
+def sample_owned_ui_fixture(phase='timeout'):
+    # Read only the exact disposable UI executable; no device/helper debugging.
+    info={'scope':'owned QHVisualSmoke diagnostics only','phase':phase,'pids':[]}
     try:
         found=subprocess.run(['pgrep','-x','QHVisualSmoke'],capture_output=True,text=True,timeout=10)
         pids=[line.strip() for line in found.stdout.splitlines() if line.strip().isdigit()]
         info['pids']=pids
         if len(pids)==1:
-            sampled=subprocess.run(['sample',pids[0],'3','1','-file',str(OUT/'visual-timeout-sample.txt')],capture_output=True,text=True,timeout=20)
-            info['sample_returncode']=sampled.returncode
-            info['diagnostic']=sampled.stdout+'\n'+sampled.stderr
+            pid=pids[0]
+            cpu=subprocess.run(['ps','-p',pid,'-o','pid,pcpu,pmem,state,etime,comm'],capture_output=True,text=True,timeout=10)
+            info['process_state']=cpu.stdout+cpu.stderr
+            try:
+                with (OUT/('visual-'+phase+'-sample-command.txt')).open('w') as log:
+                    sampled=subprocess.run(['sample',pid,'3','1','-file',str(OUT/('visual-'+phase+'-sample.txt'))],stdout=log,stderr=subprocess.STDOUT,text=True,timeout=60)
+                info['sample_returncode']=sampled.returncode
+            except subprocess.TimeoutExpired:info['sample_diagnostic']='sample timed out after 60 seconds'
+            if phase=='startup':
+                try:
+                    with (OUT/'visual-startup-lldb.txt').open('w') as log:
+                        debugged=subprocess.run(['lldb','--no-lldbinit','--batch','-p',pid,'-o','thread backtrace all','-o','process detach','-o','quit'],stdout=log,stderr=subprocess.STDOUT,text=True,timeout=45)
+                    info['lldb_returncode']=debugged.returncode
+                except subprocess.TimeoutExpired:info['lldb_diagnostic']='lldb timed out after 45 seconds'
         else:info['diagnostic']='No unique owned UI fixture PID was available.'
     except Exception as error:info['diagnostic']=str(error)
-    (OUT/'visual-timeout-process.json').write_text(json.dumps(info,indent=2))
+    (OUT/('visual-'+phase+'-process.json')).write_text(json.dumps(info,indent=2))
 if os.environ.get('GITHUB_ACTIONS')!='true':
     raise SystemExit('Visual smoke is restricted to disposable GitHub Actions macOS CI.')
 with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
@@ -41,7 +51,10 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
     arch=read('uname','-m').strip()
     sources=['Tests/VisualSmoke.m','Tests/DialogSmoke.m','App/QHDialogController.m','App/QHAppController.m','App/QHVisualComponents.m','App/QHStore.m','App/QHDownload.m','Shared/QHRuleEngine.m','Shared/QHStatusPresentation.m','Shared/QHParser.c']
     run('xcrun','--sdk','iphonesimulator','clang','-isysroot',sdk,'-arch',arch,'-mios-simulator-version-min=15.0','-fobjc-arc','-fblocks','-DQH_TESTING=1','-D_DARWIN_C_SOURCE','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-Werror=unguarded-availability','-framework','UIKit','-framework','Foundation','-framework','QuartzCore','-framework','CoreGraphics','-framework','UniformTypeIdentifiers',*sources,'-o',str(app/'QHVisualSmoke'))
-    run('codesign','--force','--sign','-',str(app))
+    # Debug entitlement is limited to this CI-only fixture, never product App/Helper.
+    debug_entitlements=work/'fixture-debug-entitlements.plist'
+    debug_entitlements.write_bytes(plistlib.dumps({'com.apple.security.get-task-allow':True}))
+    run('codesign','--force','--sign','-','--entitlements',str(debug_entitlements),str(app))
     devices=json.loads(read('xcrun','simctl','list','devices','available','--json'))['devices']
     candidates=[dict(d,runtime=runtime) for runtime,ds in devices.items() if 'iOS' in runtime for d in ds if d.get('isAvailable') and 'iPhone' in d['name']]
     if not candidates:raise SystemExit('No available iPhone simulator: smoke cannot be counted as pass.')
@@ -78,6 +91,20 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
                 capture_failed.write_text('\n'.join(capture_errors))
                 return
     capture=threading.Thread(target=capture_keyboard,daemon=True);capture.start()
+    startup_stop=threading.Event();startup_probe={'triggered':False}
+    def diagnose_stalled_first_frame():
+        seen=None
+        progress=container/'Documents/native17-progress.txt'
+        while not startup_stop.wait(15):
+            text=progress.read_text(errors='replace') if progress.is_file() else ''
+            if 'component-fixtures-start' in text:return
+            if 'initial-render-finished' not in text:continue
+            if seen is None:seen=time.monotonic()
+            if time.monotonic()-seen>=90:
+                startup_probe['triggered']=True
+                sample_owned_ui_fixture('startup')
+                return
+    startup_watchdog=threading.Thread(target=diagnose_stalled_first_frame,daemon=True);startup_watchdog.start()
     try:
         # A cold simulator boot on a loaded runner has consumed 4-5 minutes
         # before the app's first smoke log; the app-side flow itself needs
@@ -89,9 +116,16 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
         logs=text(error.stdout)+'\n'+text(error.stderr)
         (OUT/'visual-smoke-console.txt').write_text(logs)
         print(logs,flush=True)
-        sample_owned_ui_fixture()
+        startup_stop.set()
+        if startup_probe['triggered']:
+            # Finish the already bounded, related diagnostic instead of racing
+            # a second debugger/sample against it and harvesting partial logs.
+            startup_watchdog.join(timeout=130)
+        else:
+            sample_owned_ui_fixture()
         raise
     finally:
+        startup_stop.set();startup_watchdog.join(timeout=5)
         stop.set();capture.join(timeout=25)
         # A failed/timeout launch must retain the last progress, partial PNGs,
         # JSON and diagnostic files. Missing result still fails the gates below.
@@ -101,6 +135,7 @@ with tempfile.TemporaryDirectory(prefix='qh-visual-') as folder:
     print(logs)
     report=json.loads((OUT/'visual-result.json').read_text())
     assert launch.returncode==0 and report['failures']==0 and report['writes']==0,report
+    assert not startup_probe['triggered'], 'First-frame startup stalled; debugger-assisted progress is diagnostic, not acceptance'
     assert not capture_errors and (OUT/'visual-software-keyboard-screen.png').is_file(), ('Complete keyboard screenshot missing',capture_errors)
     assert report['checks']>100 and report['dialog_checks']>=90 and report['mock_status_requests']>0,report
     assert report['downloads']==0, 'UI fixtures must never make network downloads'

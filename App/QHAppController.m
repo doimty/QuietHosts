@@ -110,7 +110,9 @@ static BOOL Animate(void) {
     // page/row height: accessibility sizes still have the whole scroll range.
     NSLayoutConstraint *preferredWidth = [self.stack.widthAnchor
         constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-36];
-    preferredWidth.priority = UILayoutPriorityDefaultHigh;
+    // Container width wins over content hugging (including compact badges).
+    // Only the required viewport/cap constraints may override this preference.
+    preferredWidth.priority = 999;
     [NSLayoutConstraint activateConstraints:@[
         [scroll.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [scroll.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],

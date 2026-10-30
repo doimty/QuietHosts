@@ -24,6 +24,18 @@ static void QHSmokeProgress(const char *stage) {
     if (ProgressFile) { fprintf(ProgressFile,"%s\n",stage);fflush(ProgressFile); }
     fprintf(stderr,"QH_UI_PROGRESS %s\n",stage);fflush(stderr);
 }
+static NSUInteger LayoutTraceCount = 0;
+void QHSmokeLayoutTrace(UIView *view, const char *phase) {
+    LayoutTraceCount++;
+    // Bounded-frequency diagnostics: capture the first frame and exponential
+    // progress if a layout loop spins. Never stop or skip the actual layout.
+    if (LayoutTraceCount > 128 && (LayoutTraceCount & (LayoutTraceCount - 1)) != 0) return;
+    NSInteger axis=[view isKindOfClass:UIStackView.class] ? ((UIStackView *)view).axis : -1;
+    NSString *line=[NSString stringWithFormat:@"layout n=%lu phase=%s ptr=%p parent=%p class=%@ id=%@ frame=%@ bounds=%@ axis=%ld window=%d",
+        (unsigned long)LayoutTraceCount,phase,(__bridge void *)view,(__bridge void *)view.superview,NSStringFromClass(view.class),view.accessibilityIdentifier ?: @"-",
+        NSStringFromCGRect(view.frame),NSStringFromCGRect(view.bounds),(long)axis,view.window!=nil];
+    QHSmokeProgress(line.UTF8String);
+}
 extern void QHRunDialogSmoke(QHAppController *,void (^)(NSUInteger,NSUInteger));
 static NSDictionary *DefaultStatus(void) {
     return @{ @"ok":@YES, @"state":@"active", @"revision":@"537A11EE-1ED7-4719-9489-114078092E26",

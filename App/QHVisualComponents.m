@@ -1,5 +1,12 @@
 #import "QHVisualComponents.h"
 
+#if defined(QH_TESTING)
+extern void QHSmokeLayoutTrace(UIView *view, const char *phase);
+#define QHV_LAYOUT_TRACE(view, phase) QHSmokeLayoutTrace((view), (phase))
+#else
+#define QHV_LAYOUT_TRACE(view, phase) do { } while (0)
+#endif
+
 static UIColor *VColor(unsigned light, unsigned dark) {
     return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
         unsigned rgb = traits.userInterfaceStyle == UIUserInterfaceStyleDark ? dark : light;
@@ -122,7 +129,9 @@ typedef NS_ENUM(NSUInteger, QHVSurfaceStyle) {
     [self updateChrome];
 }
 - (void)layoutSubviews {
+    QHV_LAYOUT_TRACE(self, "surface-before-super");
     [super layoutSubviews];
+    QHV_LAYOUT_TRACE(self, "surface-after-super");
     // A known rounded path avoids repeatedly rasterizing every child for a
     // shadow. Do not rasterize text or introduce implicit appearance animation.
     if (!_hasShadowPath || !CGRectEqualToRect(_shadowBounds, self.bounds) ||
@@ -158,8 +167,11 @@ typedef NS_ENUM(NSUInteger, QHVSurfaceStyle) {
     if (self.distribution != distribution) self.distribution = distribution;
 }
 - (void)layoutSubviews {
+    QHV_LAYOUT_TRACE(self, "flow-before-update");
     [self updateFlow];
+    QHV_LAYOUT_TRACE(self, "flow-before-super");
     [super layoutSubviews];
+    QHV_LAYOUT_TRACE(self, "flow-after-super");
 }
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
