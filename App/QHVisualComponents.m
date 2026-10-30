@@ -93,8 +93,8 @@ typedef NS_ENUM(NSUInteger, QHVSurfaceStyle) {
         self.axis = UILayoutConstraintAxisVertical;
         self.spacing = 8;
         self.layoutMarginsRelativeArrangement = YES;
-        self.layoutMargins = UIEdgeInsetsMake(16, 16, 16, 16);
-        self.layer.cornerRadius = 20;
+        self.layoutMargins = UIEdgeInsetsMake(14, 14, 14, 14);
+        self.layer.cornerRadius = 18;
         [self updateChrome];
     }
     return self;
@@ -278,7 +278,7 @@ UIView *QHVBrandHeader(NSString *title, NSString *state, BOOL positive, NSString
      * appearances and has no intrinsic-size arbitration to get wrong. */
     (void)positive;
     UIStackView *text = VStack();
-    UILabel *brand = VTypeLabel(title, UIFontTextStyleTitle1, 27, UIFontWeightBold, NO);
+    UILabel *brand = VTypeLabel(title, UIFontTextStyleTitle1, 25, UIFontWeightBold, NO);
     brand.textColor = QHVAccentColor();
     brand.accessibilityTraits |= UIAccessibilityTraitHeader;
     [text addArrangedSubview:brand];
@@ -296,21 +296,39 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
     card.surfaceStyle = QHVSurfaceStyleHero;
     card.accessibilityIdentifier = @"qh.managed.card";
     QHVFlexibleStack *header = VFlow(280);
-    [header addArrangedSubview:VIconTile(attention ? @"exclamationmark.shield" : @"shield", YES,
+    [header addArrangedSubview:VIconTile(attention ? @"exclamationmark.shield" : @"shield", NO,
         attention ? VAttention() : QHVAccentColor(), attention ? VAttentionBackground() : VTile())];
     UIStackView *text = VStack();
-    if (state.length) {
-        UIStackView *badgeLine = [UIStackView new];
-        badgeLine.axis = UILayoutConstraintAxisHorizontal;
-        badgeLine.alignment = UIStackViewAlignmentLeading;
-        UIView *badge = attention ? VBadge(state, VAttention(), VAttentionBackground()) : QHVBadge(state, active);
-        [badgeLine addArrangedSubview:badge];
-        [badgeLine addArrangedSubview:[UIView new]];
-        [text addArrangedSubview:badgeLine];
-    }
-    UILabel *heading = VTypeLabel(title, UIFontTextStyleTitle2, 22, UIFontWeightSemibold, NO);
+    text.spacing = 4;
+    // Status chip rides beside the state, not on a line of its own: one heading
+    // block reads faster than badge-above-title.
+    UIStackView *titleRow = [UIStackView new];
+    titleRow.axis = UILayoutConstraintAxisHorizontal;
+    titleRow.alignment = UIStackViewAlignmentCenter;
+    titleRow.spacing = 8;
+    UILabel *heading = VTypeLabel(title, UIFontTextStyleTitle3, 19, UIFontWeightSemibold, NO);
     heading.accessibilityTraits |= UIAccessibilityTraitHeader;
-    [text addArrangedSubview:heading];
+    [heading setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                             forAxis:UILayoutConstraintAxisHorizontal];
+    [titleRow addArrangedSubview:heading];
+    if (state.length) {
+        UIView *badge = attention ? VBadge(state, VAttention(), VAttentionBackground()) : QHVBadge(state, active);
+        [titleRow addArrangedSubview:badge];
+        UIView *spacer = [UIView new];
+        [spacer setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+        [titleRow addArrangedSubview:spacer];
+    }
+    [text addArrangedSubview:titleRow];
+    if (countValue != nil) {
+        /* Compact inline count instead of a full two-column form row. */
+        UILabel *count = VTypeLabel([NSString stringWithFormat:@"%@ · %@", countTitle, countValue],
+                                    UIFontTextStyleFootnote, 13, UIFontWeightRegular, YES);
+        count.accessibilityIdentifier = @"qh.managed.count";
+        count.accessibilityLabel = countTitle;
+        count.accessibilityValue = countValue;
+        count.isAccessibilityElement = YES;
+        [text addArrangedSubview:count];
+    }
     [header addArrangedSubview:text];
     [text.widthAnchor constraintLessThanOrEqualToAnchor:header.widthAnchor].active = YES;
     if (toggle) {
@@ -321,13 +339,7 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
         [header addArrangedSubview:toggle];
     }
     [card addArrangedSubview:header];
-    if (countValue != nil) {
-        UIView *count = QHVFormRow(countTitle, countValue);
-        count.accessibilityIdentifier = @"qh.managed.count";
-        [card addArrangedSubview:count];
-    }
     if (detail.length) {
-        [card addArrangedSubview:QHVSeparator()];
         [card addArrangedSubview:VTypeLabel(detail, UIFontTextStyleFootnote, 13, UIFontWeightRegular, YES)];
     }
     return card;

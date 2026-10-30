@@ -139,7 +139,8 @@ def check_ui(ui, components, header, dialog):
         assert required in header, required
     for required in ('card.surfaceStyle = QHVSurfaceStyleHero', 'card.accessibilityIdentifier = @"qh.managed.card"',
                      'count.accessibilityIdentifier = @"qh.managed.count"', 'if (countValue != nil)',
-                     'QHVFormRow(countTitle, countValue)', '[header addArrangedSubview:toggle]', 'VNativeSwitchSize(toggle)'):
+                     'count.accessibilityValue = countValue',
+                     '[header addArrangedSubview:toggle]', 'VNativeSwitchSize(toggle)'):
         assert required in hero, required
     assert not re.search(r'toggle\.(?:on|enabled|accessibilityLabel|accessibilityValue)\s*=', mask(hero)), 'Display-only hero does not own state or consent'
     assert '[UISwitch new]' not in hero and 'countValue ?' not in hero and 'countValue ?:' not in hero

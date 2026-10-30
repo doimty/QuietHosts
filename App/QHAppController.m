@@ -107,7 +107,7 @@ static BOOL Animate(void) {
     [self.view addSubview:scroll];
     self.stack = Stack();
     self.stack.translatesAutoresizingMaskIntoConstraints = NO;
-    self.stack.spacing = 14;
+    self.stack.spacing = 12;
     [scroll addSubview:self.stack];
     // Keep phone gutters and a readable, centered column on iPad. No fixed
     // page/row height: accessibility sizes still have the whole scroll range.
@@ -125,7 +125,7 @@ static BOOL Animate(void) {
         [self.stack.leadingAnchor constraintGreaterThanOrEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor constant:18],
         [self.stack.trailingAnchor constraintLessThanOrEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor constant:-18],
         [self.stack.centerXAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.centerXAnchor],
-        [self.stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:16],
+        [self.stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:12],
         [self.stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-24],
         [self.stack.widthAnchor constraintLessThanOrEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-36],
         [self.stack.widthAnchor constraintLessThanOrEqualToConstant:680],

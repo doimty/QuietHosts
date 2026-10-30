@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix='qh-regressions-') as folder:
  # native selection/list/detail components. Keep behavior gates in the dedicated
  # structural/frozen-scope suite, plus execute actual UIKit fixtures in CI.
  run(['python3', 'scripts/test_native9_ui.py'])
- assert 'self.stack.spacing = 14' in ui
+ assert 'self.stack.spacing = 12' in ui
  build=(root/'Makefile').read_text()
  assert 'SUBPROJECTS = App Helper' in build and 'CCSupport' not in build
  assert not (root/'Module').exists()
