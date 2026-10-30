@@ -283,12 +283,12 @@ static UIStackView *QHCenteredCard(void) {
     // Every dialog is text-first: the same title/body block and the same
     // 16pt card corner as the compact confirmation.
     UIStackView *intro=QHVCard();
-    intro.layer.cornerRadius=16;
+    intro.layer.cornerRadius=18;
     [intro addArrangedSubview:QHConfirmTextBlock(self.content.title,self.detail)];
     [stack addArrangedSubview:intro];
     if (self.mutableFields.count) {
         UIStackView *inputs=QHVCard();
-        inputs.layer.cornerRadius=16;
+        inputs.layer.cornerRadius=18;
         for (UITextField *field in self.mutableFields) {
             UILabel *label=[UILabel new];label.text=field.accessibilityLabel ?: field.placeholder;
             label.numberOfLines=0;label.font=[UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
@@ -299,7 +299,7 @@ static UIStackView *QHCenteredCard(void) {
             UIView *holder=[UIView new];
             holder.translatesAutoresizingMaskIntoConstraints=NO;
             holder.backgroundColor=field.backgroundColor;
-            holder.layer.cornerRadius=10;
+            holder.layer.cornerRadius=12;
             holder.layer.masksToBounds=YES;
             field.borderStyle=UITextBorderStyleNone;
             field.backgroundColor=UIColor.clearColor;
@@ -349,7 +349,7 @@ static UIStackView *QHCenteredCard(void) {
         } else if (self.dialogStyle==UIAlertControllerStyleActionSheet) {
             if (!choices) {
                 choices=QHVCard();
-                choices.layer.cornerRadius=16;
+                choices.layer.cornerRadius=18;
                 choices.accessibilityIdentifier=@"qh.dialog.choices";
                 [stack addArrangedSubview:choices];
             }

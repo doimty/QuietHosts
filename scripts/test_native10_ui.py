@@ -32,7 +32,7 @@ def check(dialog, controller, components=None):
                      '- (BOOL)usesCenteredConfirmation', 'UIModalPresentationOverFullScreen',
                      'UIModalTransitionStyleCrossDissolve', '[self buildCenteredConfirmation];',
                      'self.centeredCard=card;', '[self setNavigationBarHidden:YES animated:NO];',
-                     'holder.layer.cornerRadius=10;', 'field.borderStyle=UITextBorderStyleNone'):
+                     'holder.layer.cornerRadius=12;', 'field.borderStyle=UITextBorderStyleNone'):
         assert required in dialog, required
     # Compact confirmation is a stacked decision, not a reused info row.
     confirm = section(dialog, '- (void)buildCenteredConfirmation {', '- (void)chooseAction:')

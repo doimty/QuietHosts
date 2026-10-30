@@ -85,7 +85,7 @@ typedef NS_ENUM(NSUInteger, QHVSurfaceStyle) {
         self.spacing = 8;
         self.layoutMarginsRelativeArrangement = YES;
         self.layoutMargins = UIEdgeInsetsMake(14, 14, 14, 14);
-        self.layer.cornerRadius = 12;
+        self.layer.cornerRadius = 16;
         [self updateChrome];
     }
     return self;
