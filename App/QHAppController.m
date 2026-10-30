@@ -589,13 +589,18 @@ static BOOL Animate(void) {
         [draftCard addArrangedSubview:apply];
         [home addArrangedSubview:draftCard];
         /* Secondary facts stay out of the card: the card carries the decision,
-         * the footnote carries reference detail. */
-        NSString *footnote = [NSString stringWithFormat:@"%@ · %@",
-            [NSByteCountFormatter stringFromByteCount:(int64_t)self.draft.compiled.hostsData.length
-                                           countStyle:NSByteCountFormatterCountStyleFile],
-            same ? QHL(@"This draft was confirmed applied in this session.")
-                 : QHL(@"Preview before applying. Saved Hosts stay unchanged until you confirm.")];
+         * the footnote carries reference detail. The confirmation state keeps
+         * its own line so it stays a distinct, assertable status. */
+        NSString *fileSize = [NSByteCountFormatter stringFromByteCount:(int64_t)self.draft.compiled.hostsData.length
+                                                           countStyle:NSByteCountFormatterCountStyleFile];
+        NSString *footnote = same ? fileSize
+            : [NSString stringWithFormat:@"%@ · %@", fileSize,
+               QHL(@"Preview before applying. Saved Hosts stay unchanged until you confirm.")];
         [home addArrangedSubview:Label(footnote, UIFontTextStyleFootnote, YES)];
+        if (same) {
+            [home addArrangedSubview:Label(QHL(@"This draft was confirmed applied in this session."),
+                                           UIFontTextStyleFootnote, YES)];
+        }
         if (!self.draftTipDismissed && [self.draft.document[@"sources"] count] == 0) {
             UIStackView *tip = QHVCard();
             [tip addArrangedSubview:QHVInfo(QHL(@"Start in three steps"),
