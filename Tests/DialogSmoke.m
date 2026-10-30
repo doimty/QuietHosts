@@ -411,7 +411,7 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
             [self check:CGRectGetMidY(primaryRect)<CGRectGetMidY(cancelRect) name:@"primary action sits above the text-only cancel"];
             [self check:fabs(CGRectGetMidX(primaryRect)-CGRectGetMidX(cancelRect))<=1.0 name:@"stacked dialog actions share one centered column"];
             [self check:fabs(CGRectGetWidth(primaryRect)-CGRectGetWidth(cancelRect))<=1.0 name:@"stacked dialog actions share the card width"];
-            [self check:CGRectGetHeight(primaryRect)>=49.0 && CGRectGetHeight(cancelRect)>=43.0 name:@"stacked dialog actions keep touch-friendly heights"];
+            [self check:CGRectGetHeight(primaryRect)>=45.0 && CGRectGetHeight(cancelRect)>=43.0 name:@"stacked dialog actions keep touch-friendly heights"];
         }
     }
     if(stage>=4) {

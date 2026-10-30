@@ -137,7 +137,7 @@ static BOOL Animate(void) {
     [super viewWillAppear:animated];
     // Root tabs carry their own masthead; pushed pages keep the navigation bar.
     if (self.navigationController) {
-        [self.navigationController setNavigationBarHidden:self.hidesNavigationBar animated:animated];
+        [self.navigationController setNavigationBarHidden:self.hidesNavigationBar animated:NO];
     }
     // Draw a stale page here: it may not be attached to a window yet, so the
     // controller's visible-page pass cannot reach it.

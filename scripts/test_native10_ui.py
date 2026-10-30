@@ -44,7 +44,7 @@ def check(dialog, controller, components=None):
     assert '[card addArrangedSubview:QHConfirmButton(cancel,!primary,self)];' in confirm
     assert confirm.index('[card addArrangedSubview:QHConfirmButton(primary,YES,self)];') < \
         confirm.index('[card addArrangedSubview:QHConfirmButton(cancel,!primary,self)];'), 'Primary action must precede the escape action'
-    assert 'constraintGreaterThanOrEqualToConstant:primary ? 46 : 42' in dialog, 'Confirm actions keep touch-friendly heights'
+    assert 'constraintGreaterThanOrEqualToConstant:primary ? 46 : 44' in dialog, 'Confirm actions keep touch-friendly heights'
     fields = section(dialog, 'for (UITextField *field in self.mutableFields)', '__weak typeof(self) weak=self;')
     assert 'field.translatesAutoresizingMaskIntoConstraints=NO;' in fields
     assert fields.index('field.translatesAutoresizingMaskIntoConstraints=NO;') < fields.index('[holder addSubview:field];')
@@ -182,7 +182,7 @@ def main():
         ('card.accessibilityIdentifier=@"qh.dialog.confirm";', ''),
         ('QHConfirmTextBlock(self.content.title,self.detail)',
          'QHVInfo(self.content.title,self.detail,@"doc.text",nil)'),
-        ('constraintGreaterThanOrEqualToConstant:primary ? 46 : 42',
+        ('constraintGreaterThanOrEqualToConstant:primary ? 46 : 44',
          'constraintGreaterThanOrEqualToConstant:primary ? 40 : 30'),
     ]
     for old, new in mutations:

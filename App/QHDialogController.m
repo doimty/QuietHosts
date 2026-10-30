@@ -131,7 +131,7 @@ static UIButton *QHConfirmButton(QHDialogAction *action, BOOL primary, QHDialogC
     button.titleLabel.adjustsFontForContentSizeCategory=YES;
     button.accessibilityLabel=action.title;
     button.accessibilityIdentifier=primary ? @"qh.dialog.confirm.primary" : @"qh.dialog.confirm.cancel";
-    [button.heightAnchor constraintGreaterThanOrEqualToConstant:primary ? 46 : 42].active=YES;
+    [button.heightAnchor constraintGreaterThanOrEqualToConstant:primary ? 46 : 44].active=YES;
     [button addAction:[UIAction actionWithHandler:^(__kindof UIAction *event) {
         (void)event;[weak chooseAction:action];
     }] forControlEvents:UIControlEventTouchUpInside];
