@@ -281,20 +281,34 @@ static void VNativeSwitchSize(UISwitch *toggle) {
 UIView *QHVBrandHeader(NSString *title, NSString *state, BOOL positive, NSString *subtitle) {
     /* The masthead no longer carries a status color: the hero below owns it. */
     (void)positive;
-    QHVFlexibleStack *masthead = VFlow(300);
-    masthead.accessibilityIdentifier = @"qh.brand.header";
-    masthead.layoutMarginsRelativeArrangement = YES;
-    masthead.layoutMargins = UIEdgeInsetsMake(2, 2, 2, 2);
     UIStackView *text = VStack();
     UILabel *brand = VTypeLabel(title, UIFontTextStyleTitle1, 27, UIFontWeightBold, NO);
     brand.textColor = QHVAccentColor();
     brand.accessibilityTraits |= UIAccessibilityTraitHeader;
     [text addArrangedSubview:brand];
-    if (subtitle.length) [text addArrangedSubview:VTypeLabel(subtitle, UIFontTextStyleSubheadline, 14, UIFontWeightRegular, YES)];
-    [masthead addArrangedSubview:text];
-    [text.widthAnchor constraintLessThanOrEqualToAnchor:masthead.layoutMarginsGuide.widthAnchor].active = YES;
-    if (state.length) [masthead addArrangedSubview:VMastheadChip(state)];
-    return masthead;
+    if (subtitle.length || state.length) {
+        /* Tag sits beside the subtitle instead of floating at the trailing edge,
+         * where the flexible stack stretched it into a full-width bar. */
+        QHVFlexibleStack *tagline = VFlow(220);
+        tagline.spacing = 8;
+        if (subtitle.length) {
+            UILabel *line = VTypeLabel(subtitle, UIFontTextStyleSubheadline, 14, UIFontWeightRegular, YES);
+            [line setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                                  forAxis:UILayoutConstraintAxisHorizontal];
+            [tagline addArrangedSubview:line];
+        }
+        if (state.length) {
+            UIView *chip = VMastheadChip(state);
+            [chip setContentHuggingPriority:999 forAxis:UILayoutConstraintAxisHorizontal];
+            [chip setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                                  forAxis:UILayoutConstraintAxisHorizontal];
+            [tagline addArrangedSubview:chip];
+        }
+        [text addArrangedSubview:tagline];
+        [tagline.widthAnchor constraintLessThanOrEqualToAnchor:text.widthAnchor].active = YES;
+    }
+    [text.widthAnchor constraintLessThanOrEqualToConstant:680].active = YES;
+    return text;
 }
 UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
                          NSString *countTitle, NSString *countValue, UISwitch *toggle,

@@ -132,12 +132,14 @@ def check_ui(ui, components, header, dialog):
     masthead = function(components, 'QHVBrandHeader')
     assert home.count('QHVStatusCard(') == 1, 'One managed-state hero, not duplicate protection panels'
     assert 'VFlow(' in masthead and 'QHVCard(' not in masthead and 'QHVIconTile(' not in masthead, 'Brand header is a light masthead'
-    assert 'qh.brand.header' in masthead
-    # The masthead chip must sit on a card-colored fill: the inset fill was
-    # invisible against the light page background.
+    # The masthead chip must sit on a card-colored fill and stay intrinsic:
+    # the inset fill was invisible in light mode, and the trailing placement
+    # stretched it into a full-width bar.
     chip = function(components, 'VMastheadChip')
     assert 'QHVCardColor()' in chip, 'Masthead chip needs a visible surface'
-    assert '[masthead addArrangedSubview:VMastheadChip(state)]' in masthead
+    assert '[tagline addArrangedSubview:chip]' in masthead, 'Chip belongs beside the subtitle'
+    assert 'QHVFlexibleStack *tagline = VFlow(220);' in masthead
+    assert '[chip setContentHuggingPriority:999 forAxis:UILayoutConstraintAxisHorizontal];' in masthead
     for required in ('QHVStatusCard(', 'QHVCommandRow(', 'QHVRow('):
         assert required in header, required
     for required in ('card.surfaceStyle = QHVSurfaceStyleHero', 'card.accessibilityIdentifier = @"qh.managed.card"',
