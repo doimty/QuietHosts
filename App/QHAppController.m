@@ -576,15 +576,9 @@ static BOOL Animate(void) {
             QHL(@"Duplicates removed"), Number([self.draft.compiled.statistics[@"duplicates"] unsignedIntegerValue]));
         stats.accessibilityIdentifier = @"qh.draft.stats";
         [draftCard addArrangedSubview:stats];
-        [draftCard addArrangedSubview:QHVFormRow(QHL(@"Generated file size"),
-            [NSByteCountFormatter stringFromByteCount:(int64_t)self.draft.compiled.hostsData.length
-                                           countStyle:NSByteCountFormatterCountStyleFile])];
-        [draftCard addArrangedSubview:QHVSeparator()];
         // Counts alone cannot prove equality. Keep the existing revision proof.
         BOOL same = [self.appliedLocalRevision isEqual:self.draft.document[@"revision"]] &&
                     [self.appliedHelperRevision isEqual:self.status[@"revision"]] && active;
-        [draftCard addArrangedSubview:Label(same ? QHL(@"This draft was confirmed applied in this session.") :
-            QHL(@"Preview before applying. Saved Hosts stay unchanged until you confirm."), UIFontTextStyleFootnote, YES)];
         BOOL firstSource = [self.draft.document[@"sources"] count] == 0 && !active && !inactive;
         UIButton *apply = Button(firstSource ? QHL(@"Add your first source") : QHL(@"Preview and apply"),
             YES, !self.busy, ^{
@@ -594,6 +588,14 @@ static BOOL Animate(void) {
         apply.accessibilityIdentifier = @"qh.draft.apply";
         [draftCard addArrangedSubview:apply];
         [home addArrangedSubview:draftCard];
+        /* Secondary facts stay out of the card: the card carries the decision,
+         * the footnote carries reference detail. */
+        NSString *footnote = [NSString stringWithFormat:@"%@ · %@",
+            [NSByteCountFormatter stringFromByteCount:(int64_t)self.draft.compiled.hostsData.length
+                                           countStyle:NSByteCountFormatterCountStyleFile],
+            same ? QHL(@"This draft was confirmed applied in this session.")
+                 : QHL(@"Preview before applying. Saved Hosts stay unchanged until you confirm.")];
+        [home addArrangedSubview:Label(footnote, UIFontTextStyleFootnote, YES)];
         if (!self.draftTipDismissed && [self.draft.document[@"sources"] count] == 0) {
             UIStackView *tip = QHVCard();
             [tip addArrangedSubview:QHVInfo(QHL(@"Start in three steps"),

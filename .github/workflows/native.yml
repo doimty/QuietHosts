@@ -90,7 +90,7 @@ jobs:
           arch=iphoneos-arm64e
           prefix=''
           if [ "$QH_SCHEME" = rootless ]; then arch=iphoneos-arm64; prefix=var/jb/; fi
-          deb=packages/com.doimty.quiethosts_0.1.0-1+native29_${arch}.deb
+          deb=packages/com.doimty.quiethosts_0.1.0-1+native30_${arch}.deb
           test -f "$deb"
           python3 ci/canonicalize_deb.py "$deb" --scheme "$QH_SCHEME" | tee build-metadata/ownership-repack.txt
           python3 scripts/check_package_ownership.py "$deb" --scheme "$QH_SCHEME" | tee build-metadata/ownership-check.txt

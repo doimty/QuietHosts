@@ -278,10 +278,9 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
     card.surfaceStyle = QHVSurfaceStyleHero;
     card.accessibilityIdentifier = @"qh.managed.card";
     QHVFlexibleStack *header = VFlow(280);
-    // Protection colour carries the state, the way AdGuard marks an active
-    // shield: green when the rules are in effect, amber when attention is due.
-    UIColor *tint = attention ? VAttention() : (active ? VGood() : QHVSecondaryTextColor());
-    UIColor *tile = attention ? VAttentionBackground() : (active ? VGoodBackground() : QHVInnerColor());
+    // Status stays in the brand accent; simplicity, not a new hue, is the goal.
+    UIColor *tint = attention ? VAttention() : (active ? QHVAccentColor() : QHVSecondaryTextColor());
+    UIColor *tile = attention ? VAttentionBackground() : (active ? VTile() : QHVInnerColor());
     [header addArrangedSubview:VIconTile(attention ? @"exclamationmark.shield"
                                                   : (active ? @"checkmark.shield" : @"shield"), NO, tint, tile)];
     UIStackView *text = VStack();
@@ -298,8 +297,8 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
     [titleRow addArrangedSubview:heading];
     if (state.length) {
         UIView *badge = attention ? VBadge(state, VAttention(), VAttentionBackground())
-                                  : VBadge(state, active ? VGood() : QHVSecondaryTextColor(),
-                                           active ? VGoodBackground() : QHVInnerColor());
+                                  : VBadge(state, active ? QHVAccentColor() : QHVSecondaryTextColor(),
+                                           active ? VTile() : QHVInnerColor());
         [titleRow addArrangedSubview:badge];
         UIView *spacer = [UIView new];
         [spacer setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
@@ -321,7 +320,7 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
     if (toggle) {
         // Never assign on/enabled/accessibility state here. The controller owns
         // confirmed file state and consent; this is the original native control.
-        toggle.onTintColor = active ? VGood() : QHVAccentColor();
+        toggle.onTintColor = QHVAccentColor();
         VNativeSwitchSize(toggle);
         [header addArrangedSubview:toggle];
     }
