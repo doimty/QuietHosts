@@ -651,6 +651,48 @@ static void DirectoryLayoutRefusals(void);
 static void DirectoryLayoutRaces(void);
 /* Defined only in QHFileManager.m under QH_TESTING; not public helper API. */
 extern void QHSetDirectoryMutationHook(NSString *point, void (^mutation)(void));
+static void RevertedAtBoot(void) {
+    /* RootHide rebuilds its /etc mirror at boot, so the managed entry can come
+     * back as the exact original this helper replaced. That is a restart, not
+     * foreign tampering: report the file truth and allow a checked re-apply. */
+    QHFixture *f = Fixture(YES);
+    Check([[f apply:Blocks() count:1 revision:f.status[@"revision"]][@"ok"] boolValue],
+          @"boot-revert fixture starts active");
+    struct stat installed;
+    Require(lstat(f.target.fileSystemRepresentation, &installed) == 0 && S_ISREG(installed.st_mode));
+    Require(unlink(f.target.fileSystemRepresentation) == 0);
+    Require(symlink(f.raw.fileSystemRepresentation, f.target.fileSystemRepresentation) == 0);
+    NSDictionary *status = f.status;
+    Check([status[@"ok"] boolValue] && [status[@"state"] isEqual:@"inactive"] &&
+              [status[@"reverted"] boolValue],
+          @"entry restored to the recorded original reports inactive, not a conflict");
+    Check([[NSData dataWithContentsOfFile:f.raw] isEqual:Text(Original)],
+          @"reported status is read only for the raw system file");
+    NSData *updated = Text(@"0.0.0.0 afterboot.example\n::1 afterboot.example\n");
+    NSDictionary *result = [f apply:updated count:1 revision:status[@"revision"]];
+    Check([result[@"ok"] boolValue] && [result[@"state"] isEqual:@"active"] && [result[@"changed"] boolValue],
+          @"re-apply rewrites the reverted entry instead of reporting a no-op");
+    struct stat rewritten;
+    Require(lstat(f.target.fileSystemRepresentation, &rewritten) == 0 && S_ISREG(rewritten.st_mode));
+    NSData *written = [NSData dataWithContentsOfFile:f.target];
+    Check([written rangeOfData:Text(@"afterboot.example") options:0
+                          range:NSMakeRange(0, written.length)].location != NSNotFound,
+          @"re-applied target carries the new rules");
+    Check([[f command:@"disable"][@"ok"] boolValue], @"disable after re-apply succeeds");
+    Check([[NSData dataWithContentsOfFile:f.target] isEqual:Text(Original)],
+          @"disable still restores the real original contents");
+    /* A foreign replacement is still a hard refusal. */
+    QHFixture *g = Fixture(YES);
+    Check([[g apply:Blocks() count:1 revision:g.status[@"revision"]][@"ok"] boolValue],
+          @"foreign-change fixture starts active");
+    Require(unlink(g.target.fileSystemRepresentation) == 0);
+    Put(g.target, Text(@"0.0.0.0 foreign.example\n"), 0644);
+    NSDictionary *refused = g.status;
+    Check(![refused[@"ok"] boolValue] && [refused[@"errorCode"] isEqual:@"target-conflict"],
+          @"foreign content at the managed entry remains a target conflict");
+    Check([[NSData dataWithContentsOfFile:g.target] isEqual:Text(@"0.0.0.0 foreign.example\n")],
+          @"refused foreign content is left untouched");
+}
 NSUInteger RunFileManagerTests(void) {
     failures = 0;
     @autoreleasepool {
@@ -667,6 +709,7 @@ NSUInteger RunFileManagerTests(void) {
         PersistedMountIdentity();
         PersistedMetadataStillStrict();
         PersistedJournalMountIdentity();
+        RevertedAtBoot();
         DirectoryLayouts();
         DirectoryLayoutRefusals();
         DirectoryLayoutRaces();

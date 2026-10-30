@@ -303,3 +303,5 @@
 "Import, review, apply. Restore when needed." = "Import, review, apply. Restore when needed.";
 "Understand what stays on this device." = "Understand local data and network requests.";
 "Opens GitHub. No report is sent automatically." = "Opens GitHub. No report is sent automatically.";
+"Rules were restored after a restart" = "Rules were restored after a restart";
+"The system rebuilt its Hosts mirror when it restarted. Saved rules are not active; preview and apply to install them again." = "The system rebuilt its Hosts mirror when it restarted. Saved rules are not active; preview and apply to install them again.";

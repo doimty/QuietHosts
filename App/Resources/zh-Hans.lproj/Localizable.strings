@@ -303,3 +303,5 @@
 "Import, review, apply. Restore when needed." = "导入、预览、应用，以及恢复";
 "Understand what stays on this device." = "了解本机数据与网络连接";
 "Opens GitHub. No report is sent automatically." = "在浏览器打开 GitHub，不会自动上传报告";
+"Rules were restored after a restart" = "重启后规则已被还原";
+"The system rebuilt its Hosts mirror when it restarted. Saved rules are not active; preview and apply to install them again." = "系统在重启时重建了 Hosts 镜像，已保存的规则当前未生效。预览并确认应用即可重新安装。";

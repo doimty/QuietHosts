@@ -478,6 +478,9 @@ static BOOL Animate(void) {
 }
 - (NSString *)shortState {
     if (!self.status) return QHL(@"Checking file state");
+    // A reboot can rebuild the managed entry; the recorded rules are then not in
+    // effect even though the helper still has them saved.
+    if ([self.status[@"reverted"] boolValue]) return QHL(@"Not applied");
     if (![self statusWritable:self.status]) return QHL(@"Needs attention");
     if ([self.status[@"state"] isEqual:@"active"]) return QHL(@"Enabled");
     if ([self.status[@"state"] isEqual:@"inactive"]) return QHL(@"Paused");
@@ -539,10 +542,17 @@ static BOOL Animate(void) {
         managedCount = Number([self.status[@"domainCount"] unsignedIntegerValue]);
     }
     NSString *stateDetail = writable
-        ? QHL(@"Verified Hosts file only. DNS filtering and app caches are not tested.")
+        ? ([self.status[@"reverted"] boolValue]
+               ? QHL(@"The system rebuilt its Hosts mirror when it restarted. Saved rules are not active; preview and apply to install them again.")
+               : QHL(@"Verified Hosts file only. DNS filtering and app caches are not tested."))
         : [self statusExplanation:self.status];
-    UIStackView *managed = QHVStatusCard(self.stateTitle,
-        writable ? QHL(@"Verified file state") : self.shortState, stateDetail,
+    NSString *heroTitle = [self.status[@"reverted"] boolValue] && writable
+        ? QHL(@"Rules were restored after a restart")
+        : self.stateTitle;
+    UIStackView *managed = QHVStatusCard(heroTitle,
+        writable ? ([self.status[@"reverted"] boolValue] ? QHL(@"Not applied") : QHL(@"Verified file state"))
+                 : self.shortState,
+        stateDetail,
         active ? QHL(@"Managed domains") : QHL(@"Saved domains"), managedCount,
         mainSwitch, active, self.status != nil && !writable);
     [home addArrangedSubview:managed];

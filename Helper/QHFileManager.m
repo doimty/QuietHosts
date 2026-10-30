@@ -564,6 +564,10 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
 @property(nonatomic, copy) NSString *pairedNativeDataRoot, *pairedCanonicalDataRoot, *pairParentPath;
 @property(nonatomic, copy) NSString *pairRootName, *canonicalRootPath;
 @property(nonatomic) BOOL pairedConfigured, pairedLayout, adoptionRequired, recovered, actualChanged;
+/* True when the managed entry came back as the exact original this helper
+ * replaced: RootHide rebuilds its /etc mirror at boot, so a restart looks like
+ * a target conflict even though nothing foreign touched the file. */
+@property(nonatomic) BOOL targetReverted;
 @property(nonatomic, strong) NSDictionary *state, *target, *system, *original;
 @property(nonatomic, strong) NSData *baseline, *snapshot, *existingHosts;
 - (instancetype)initWithRoot:(NSString *)root
@@ -1172,7 +1176,17 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
     _snapshot = [self snapshotForState:_state];
     [self validateContents:_state baseline:_baseline snapshot:_snapshot];
     if (!SamePersistedTarget(_target, _state[@"target"])) {
-        Fail(@"target-conflict");
+        /* Accept exactly one known non-tampering case: the entry is back to the
+         * original we recorded before takeover, and the recorded rules are still
+         * marked active. Anything else stays a refusal. */
+        BOOL restoredBySystem = [_state[@"active"] boolValue] &&
+                                SamePersistedTarget(_target, _state[@"original"]);
+        if (!restoredBySystem) {
+            Fail(@"target-conflict");
+        }
+        self.targetReverted = YES;
+    } else {
+        self.targetReverted = NO;
     }
     if (![_state[@"active"] boolValue] && ![_state[@"original"][@"kind"] isEqual:@"regular"]) {
         [self verifyMirror:_target];
@@ -1293,9 +1307,17 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
 - (NSDictionary *)response {
     NSString *revision =
         _state ? _state[@"revision"] : Digest(JSON(@{@"target" : _target, @"system" : _system}));
+    NSString *state =
+        _state ? ([_state[@"active"] boolValue] ? @"active" : @"inactive") : @"unmanaged";
+    /* Report the file truth: the recorded rules are not in effect after the
+     * system rebuilt the mirror, so the app can offer a checked re-apply
+     * instead of a dead end. Persisted state is left untouched here. */
+    if (self.targetReverted) {
+        state = @"inactive";
+    }
     NSMutableDictionary *result = [@{
         @"ok" : @YES,
-        @"state" : _state ? ([_state[@"active"] boolValue] ? @"active" : @"inactive") : @"unmanaged",
+        @"state" : state,
         @"revision" : revision,
         @"domainCount" : _state ? _state[@"domainCount"] : @0,
         @"changed" : @(_actualChanged),
@@ -1303,6 +1325,9 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
         @"reloadPending" : @(_recovered),
         @"hasBaseline" : @(_state != nil)
     } mutableCopy];
+    if (self.targetReverted) {
+        result[@"reverted"] = @YES;
+    }
     if (_adoptionRequired && !_state) {
         result[@"requiresAdoption"] = @YES;
         result[@"existingHostsBytes"] = @(_existingHosts.length);
@@ -1314,7 +1339,8 @@ static int OpenNamespaceDirectory(NSString *path, uid_t expectedOwner) {
     if (!_state && !active) {
         return NO;
     }
-    if (_state && [_state[@"active"] boolValue] == active && [_snapshot isEqual:snapshot]) {
+    if (_state && [_state[@"active"] boolValue] == active && [_snapshot isEqual:snapshot] &&
+        !self.targetReverted) {
         return NO;
     }
     [self anchors];

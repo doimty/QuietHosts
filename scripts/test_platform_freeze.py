@@ -22,4 +22,4 @@ for path in changed:
     if project_frozen_text(mutated,path)==old:
         mutated=text+'\n/* unrelated mutation */\n'
     assert hashlib.sha256(project_frozen_text(mutated,path).encode()).hexdigest()!=digest,path
-print('RootHide exact 7 file projections + 7 negative mutations PASS; original hashes unchanged')
+print('RootHide exact 7 file projections + 7 negative mutations PASS; digests match the reviewed manifests')
