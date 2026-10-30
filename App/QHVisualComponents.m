@@ -39,14 +39,6 @@ static UIColor *VBorder(void) {
         return [QHVLineColor() resolvedColorWithTraitCollection:traits];
     }];
 }
-static UIColor *VShadow(void) {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
-            ? [UIColor colorWithWhite:0 alpha:0.22]
-            : [UIColor colorWithRed:0.12 green:0.08 blue:0.25 alpha:0.10];
-    }];
-}
-
 static UILabel *VLabel(NSString *text, UIFontTextStyle style, BOOL secondary) {
     UILabel *label = [UILabel new];
     label.text = text;
@@ -83,18 +75,14 @@ typedef NS_ENUM(NSUInteger, QHVSurfaceStyle) {
 @property(nonatomic) QHVSurfaceStyle surfaceStyle;
 - (void)updateChrome;
 @end
-@implementation QHVSurfaceStack {
-    CGRect _shadowBounds;
-    CGFloat _shadowCorner;
-    BOOL _hasShadowPath;
-}
+@implementation QHVSurfaceStack
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
         self.axis = UILayoutConstraintAxisVertical;
         self.spacing = 8;
         self.layoutMarginsRelativeArrangement = YES;
         self.layoutMargins = UIEdgeInsetsMake(14, 14, 14, 14);
-        self.layer.cornerRadius = 18;
+        self.layer.cornerRadius = 16;
         [self updateChrome];
     }
     return self;
@@ -110,10 +98,11 @@ typedef NS_ENUM(NSUInteger, QHVSurfaceStyle) {
     self.layer.borderWidth = self.traitCollection.accessibilityContrast == UIAccessibilityContrastHigh
         ? 1.0 : 1.0 / MAX(scale, 1.0);
     self.layer.borderColor = [VBorder() resolvedColorWithTraitCollection:self.traitCollection].CGColor;
-    self.layer.shadowColor = [VShadow() resolvedColorWithTraitCollection:self.traitCollection].CGColor;
-    self.layer.shadowOpacity = self.surfaceStyle == QHVSurfaceStyleInset ? 0 : 0.5;
-    self.layer.shadowRadius = 10;
-    self.layer.shadowOffset = CGSizeMake(0, 3);
+    // Flat grouped surfaces: a hairline border separates cards cleanly, while a
+    // soft drop shadow on every card is what made the layout read as a mockup.
+    self.layer.shadowOpacity = 0;
+    self.layer.shadowRadius = 0;
+    self.layer.shadowOffset = CGSizeZero;
 }
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     [super traitCollectionDidChange:previousTraitCollection];
@@ -132,16 +121,6 @@ typedef NS_ENUM(NSUInteger, QHVSurfaceStyle) {
     QHV_LAYOUT_TRACE(self, "surface-before-super");
     [super layoutSubviews];
     QHV_LAYOUT_TRACE(self, "surface-after-super");
-    // A known rounded path avoids repeatedly rasterizing every child for a
-    // shadow. Do not rasterize text or introduce implicit appearance animation.
-    if (!_hasShadowPath || !CGRectEqualToRect(_shadowBounds, self.bounds) ||
-        _shadowCorner != self.layer.cornerRadius) {
-        _shadowBounds = self.bounds;
-        _shadowCorner = self.layer.cornerRadius;
-        self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.bounds
-                                                        cornerRadius:_shadowCorner].CGPath;
-        _hasShadowPath = YES;
-    }
 }
 @end
 
@@ -300,10 +279,9 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
         attention ? VAttention() : QHVAccentColor(), attention ? VAttentionBackground() : VTile())];
     UIStackView *text = VStack();
     text.spacing = 4;
-    // Status chip rides beside the state, not on a line of its own: one heading
-    // block reads faster than badge-above-title.
-    UIStackView *titleRow = [UIStackView new];
-    titleRow.axis = UILayoutConstraintAxisHorizontal;
+    // Status chip rides beside the state at normal sizes and drops to its own
+    // line under accessibility text, where a fixed row would squeeze the title.
+    QHVFlexibleStack *titleRow = VFlow(160);
     titleRow.alignment = UIStackViewAlignmentCenter;
     titleRow.spacing = 8;
     UILabel *heading = VTypeLabel(title, UIFontTextStyleTitle3, 19, UIFontWeightSemibold, NO);
@@ -340,7 +318,7 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
     }
     [card addArrangedSubview:header];
     if (detail.length) {
-        [card addArrangedSubview:VTypeLabel(detail, UIFontTextStyleFootnote, 13, UIFontWeightRegular, YES)];
+        [card addArrangedSubview:VTypeLabel(detail, UIFontTextStyleFootnote, 12, UIFontWeightRegular, YES)];
     }
     return card;
 }
@@ -445,15 +423,15 @@ UIControl *QHVCommandRow(NSString *title, NSString *subtitle, NSString *symbol, 
 static UIView *VStat(NSString *title, NSString *value) {
     QHVSurfaceStack *panel = (QHVSurfaceStack *)QHVCard();
     panel.surfaceStyle = QHVSurfaceStyleInset;
-    panel.layer.cornerRadius = 14;
-    panel.spacing = 4;
-    panel.layoutMargins = UIEdgeInsetsMake(10, 12, 10, 12);
+    panel.layer.cornerRadius = 12;
+    panel.spacing = 2;
+    panel.layoutMargins = UIEdgeInsetsMake(9, 11, 9, 11);
     UILabel *number = VLabel(value, UIFontTextStyleTitle3, NO);
     number.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleTitle3]
-        scaledFontForFont:[UIFont monospacedDigitSystemFontOfSize:20 weight:UIFontWeightSemibold]];
+        scaledFontForFont:[UIFont monospacedDigitSystemFontOfSize:18 weight:UIFontWeightSemibold]];
     // Keep the number as arrangedSubviews[0] for the existing live-font fixture.
     [panel addArrangedSubview:number];
-    [panel addArrangedSubview:VTypeLabel(title, UIFontTextStyleFootnote, 12, UIFontWeightRegular, YES)];
+    [panel addArrangedSubview:VTypeLabel(title, UIFontTextStyleFootnote, 11, UIFontWeightRegular, YES)];
     panel.isAccessibilityElement = YES;
     panel.accessibilityLabel = title;
     panel.accessibilityValue = value;
