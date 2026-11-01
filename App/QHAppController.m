@@ -718,7 +718,7 @@ static BOOL Animate(void) {
     [rules addArrangedSubview:rulesMasthead];
     [rules setCustomSpacing:20 afterView:rulesMasthead];
     UILabel *rulesSourcesHeading = QHVSection(QHL(@"Rule sources"));
-    [rules addArrangedSubview:rules12Heading];
+    [rules addArrangedSubview:rulesSourcesHeading];
     [rules setCustomSpacing:8 afterView:rulesSourcesHeading];
     if (!self.draft) {
         [rules addArrangedSubview:QHVNote(QHL(@"Local storage must load successfully before you can change rules."), @"exclamationmark.triangle")];
@@ -747,14 +747,14 @@ static BOOL Animate(void) {
         NO, !self.busy && sources.count < QHMaximumSources, ^{ [weak chooseImport:NO]; })];
     [rules addArrangedSubview:list];
     UILabel *rulesAllowlistHeading = QHVSection(QHL(@"Allowlist"));
-    [rules addArrangedSubview:rules9Heading];
+    [rules addArrangedSubview:rulesAllowlistHeading];
     [rules setCustomSpacing:8 afterView:rulesAllowlistHeading];
     UIStackView *allow = QHVCard();
     [allow addArrangedSubview:QHVRow(QHL(@"Exact allowlist"), QHL(@"Only exact domains are excluded from our generated blocklist."),
         @"checkmark", Number(self.draft.allowlistCount), NO, !self.busy, ^{ [weak chooseImport:YES]; })];
     [rules addArrangedSubview:allow];
     UILabel *rulesFormatsHeading = QHVSection(QHL(@"Rule formats"));
-    [rules addArrangedSubview:rules12Heading];
+    [rules addArrangedSubview:rulesFormatsHeading];
     [rules setCustomSpacing:8 afterView:rulesFormatsHeading];
     UIStackView *formats = QHVCard();
     [formats addArrangedSubview:QHVInfo(QHL(@"Exact DOMAIN / HOST"), QHL(@"Hosts entries, bare domains and exact blocking domain rules."),
