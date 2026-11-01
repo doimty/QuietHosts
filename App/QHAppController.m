@@ -207,8 +207,8 @@ static BOOL Animate(void) {
     self.textView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     self.textView.adjustsFontForContentSizeCategory = YES;
     self.textView.backgroundColor = CardBackground();
-    self.textView.layer.cornerRadius = 16;
-    self.textView.textContainerInset = UIEdgeInsetsMake(16, 12, 16, 12);
+    self.textView.layer.cornerRadius = 18;
+    self.textView.textContainerInset = UIEdgeInsetsMake(16, 16, 16, 16);
     self.textView.autocorrectionType = UITextAutocorrectionTypeNo;
     self.textView.autocapitalizationType = UITextAutocapitalizationTypeNone;
     self.textView.smartQuotesType = UITextSmartQuotesTypeNo;
@@ -661,6 +661,7 @@ static BOOL Animate(void) {
 - (void)renderSourceDetail {
     QHPage *page = self.sourceDetailPage;
     if (!page) return;
+    page.stack.spacing = 16;
     [page clear];
     NSDictionary *source = nil;
     for (NSDictionary *item in self.draft.document[@"sources"]) {
@@ -964,6 +965,8 @@ static BOOL Animate(void) {
     QHPage *page = [QHPage new];
     page.title = title;
     [page loadViewIfNeeded];
+    page.stack.spacing = 16;
+
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:page];
     QHConfigureModal(nav);
     nav.modalInPresentation = YES;
@@ -992,7 +995,9 @@ static BOOL Animate(void) {
         [NSByteCountFormatter stringFromByteCount:(int64_t)preview.compiled.hostsData.length
                                        countStyle:NSByteCountFormatterCountStyleFile])];
     [page.stack addArrangedSubview:counts];
-    [page.stack addArrangedSubview:QHVSection(QHL(@"All source inputs, including disabled sources:"))];
+    UILabel *previewInputsHeading = QHVSection(QHL(@"All source inputs, including disabled sources:"));
+    [page.stack addArrangedSubview:previewInputsHeading];
+    [page.stack setCustomSpacing:8 afterView:previewInputsHeading];
     UIStackView *inputs = QHVCard();
     [inputs addArrangedSubview:QHVFormRow(QHL(@"Accepted domains"), Number([p[@"accepted"] unsignedIntegerValue]))];
     [inputs addArrangedSubview:QHVSeparator()];
