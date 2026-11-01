@@ -26,6 +26,8 @@ def check(dialog, controller, components=None):
     assert 'modalPresentationStyle=UIModalPresentationFormSheet' in dialog
     assert 'controller.modalInPresentation=YES' in dialog
     for required in ('sheet.detents=@[UISheetPresentationControllerDetent.largeDetent]',
+                     'customDetentWithIdentifier:@"qh.menu"', 'UISheetPresentationControllerDetent.mediumDetent',
+                     'sheet.selectedDetentIdentifier=@"qh.menu"',
                      'sheet.prefersGrabberVisible=YES', 'sheet.preferredCornerRadius=28;',
                      'view.keyboardLayoutGuide.topAnchor',
                      'sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;',
@@ -100,18 +102,25 @@ def check(dialog, controller, components=None):
     # One text block and one filled-action spec serve compact and expanded dialogs.
     assert dialog.count('QHConfirmTextBlock(self.content.title,self.detail)') == 2, 'Both dialog shapes share the same title/body block'
     assert 'QHVInfo(self.content.title' not in dialog, 'Dialogs must not fall back to the icon info row'
-    # ActionSheet options share one group. Cancellation remains the separate
-    # original navigation action and still routes through chooseAction.
+    # P2 menu: options share one list directly on the sheet background, not
+    # another card. Cancellation is its own group below the list and still
+    # routes through chooseAction; non-menu dialogs keep the navigation close.
     choices = section(appearance, '__weak typeof(self) weak=self;', None)
     assert choices.index('UIStackView *choices=nil;') < choices.index('for (QHDialogAction *action in self.mutableActions)')
-    assert choices.count('choices=QHVCard();') == 1 and 'if (!choices) {' in choices
-    assert 'choices.accessibilityIdentifier=@"qh.dialog.choices";' in choices
+    assert 'choices=[UIStackView new];' in choices and 'choices=QHVCard();' not in choices
+    assert 'if (!choices) {' in choices, 'Menu list is created once, not once per row'
+    assert 'choices.axis=UILayoutConstraintAxisVertical;' in choices
+    assert 'choices.accessibilityIdentifier=@\"qh.dialog.choices\";' in choices
     assert '[stack addArrangedSubview:choices];' in choices
     assert 'if (choices.arrangedSubviews.count) [choices addArrangedSubview:QHVSeparator()];' in choices
-    assert '[choices addArrangedSubview:QHVRow(action.title' in choices
+    assert '[choices addArrangedSubview:menuRow];' in choices
+    assert 'constraintGreaterThanOrEqualToConstant:52' in choices, 'Menu rows are 52pt'
     assert 'UIStackView *choice=QHVCard();' not in choices
     assert choices.index('UIAlertActionStyleCancel') < choices.index('self.dialogStyle==UIAlertControllerStyleActionSheet')
     assert 'self.content.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithCustomView:close]' in choices
+    assert 'QHDialogAction *menuCancel=nil;' in choices
+    assert 'QHConfirmButton(menuCancel,NO,self)' in choices, 'Menu cancel is a text button in its own group'
+    assert 'cancelGroup.accessibilityIdentifier=@\"qh.dialog.cancel\";' in choices
     assert '[close.heightAnchor constraintGreaterThanOrEqualToConstant:44]' in choices
     assert '[close.widthAnchor constraintGreaterThanOrEqualToConstant:44]' in choices
     assert 'constant:22' not in controller, 'Editor insets must match the shared 18pt rhythm'
@@ -172,6 +181,9 @@ def main():
          '[field.leadingAnchor constraintEqualToAnchor:holder.leadingAnchor constant:0]'),
         ('QHVPrimaryForegroundColor()', 'QHVAccentColor()'),
         ('if (!choices) {', 'if (YES) {'),
+        ('choices=[UIStackView new];', 'choices=QHVCard();'),
+        ('QHConfirmButton(menuCancel,NO,self)', 'QHConfirmButton(menuCancel,YES,self)'),
+        ('constraintGreaterThanOrEqualToConstant:52', 'constraintGreaterThanOrEqualToConstant:44'),
         ('choices.accessibilityIdentifier=@"qh.dialog.choices";', ''),
         ('scaledFontForFont:[UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]',
          'scaledFontForFont:[UIFont systemFontOfSize:13 weight:UIFontWeightSemibold]'),

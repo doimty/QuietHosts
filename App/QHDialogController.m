@@ -1,6 +1,18 @@
 #import "QHDialogController.h"
 #import "QHVisualComponents.h"
 
+@interface QHDialogController ()
+@property(nonatomic,strong) UIViewController *content;
+@property(nonatomic,copy) NSString *detail;
+@property(nonatomic) UIAlertControllerStyle dialogStyle;
+@property(nonatomic,strong) NSMutableArray<QHDialogAction *> *mutableActions;
+@property(nonatomic,strong) NSMutableArray<UITextField *> *mutableFields;
+@property(nonatomic) BOOL resolving;
+@property(nonatomic) BOOL contentBuilt;
+@property(nonatomic,strong) UIStackView *centeredCard;
+@property(nonatomic) BOOL resolvedCentered;
+@end
+
 void QHConfigureModal(UIViewController *controller) {
     // Commit the actual UIKit properties while callers are still configuring
     // actions/fields, before presentViewController starts its transition.
@@ -14,8 +26,30 @@ void QHConfigureModal(UIViewController *controller) {
     controller.modalInPresentation=YES;
     if (!centered) {
         UISheetPresentationController *sheet=controller.sheetPresentationController;
-        sheet.detents=@[UISheetPresentationControllerDetent.largeDetent];
-        sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;
+        BOOL menu=[controller isKindOfClass:QHDialogController.class] &&
+                  [(QHDialogController *)controller dialogStyle]==UIAlertControllerStyleActionSheet;
+        if (menu) {
+            // P2 menu: open at content height, not a full sheet. The 480pt cap
+            // covers a short intro plus up to six 52pt rows and the cancel
+            // group; longer content scrolls and the sheet can expand to large.
+            if (@available(iOS 16.0, *)) {
+                UISheetPresentationControllerDetent *contentDetent=
+                    [UISheetPresentationControllerDetent customDetentWithIdentifier:@"qh.menu"
+                        resolver:^CGFloat(id<UISheetPresentationControllerDetentResolutionContext> context) {
+                            return MIN(context.maximumDetentValue, 480);
+                        }];
+                sheet.detents=@[contentDetent, UISheetPresentationControllerDetent.mediumDetent,
+                                UISheetPresentationControllerDetent.largeDetent];
+                sheet.selectedDetentIdentifier=@"qh.menu";
+            } else {
+                sheet.detents=@[UISheetPresentationControllerDetent.mediumDetent,
+                                UISheetPresentationControllerDetent.largeDetent];
+                sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierMedium;
+            }
+        } else {
+            sheet.detents=@[UISheetPresentationControllerDetent.largeDetent];
+            sheet.selectedDetentIdentifier=UISheetPresentationControllerDetentIdentifierLarge;
+        }
         sheet.prefersGrabberVisible=YES;
         sheet.preferredCornerRadius=28;
         sheet.prefersScrollingExpandsWhenScrolledToEdge=YES;
@@ -44,17 +78,6 @@ void QHConfigureModal(UIViewController *controller) {
     action.title=title;action.style=style;action.handler=handler;
     return action;
 }
-@end
-@interface QHDialogController ()
-@property(nonatomic,strong) UIViewController *content;
-@property(nonatomic,copy) NSString *detail;
-@property(nonatomic) UIAlertControllerStyle dialogStyle;
-@property(nonatomic,strong) NSMutableArray<QHDialogAction *> *mutableActions;
-@property(nonatomic,strong) NSMutableArray<UITextField *> *mutableFields;
-@property(nonatomic) BOOL resolving;
-@property(nonatomic) BOOL contentBuilt;
-@property(nonatomic,strong) UIStackView *centeredCard;
-@property(nonatomic) BOOL resolvedCentered;
 @end
 /* Forward declaration: QHCenteredActionButton runs before the @implementation
  * and must be able to dispatch chooseAction: through the weak owner. */
@@ -258,6 +281,7 @@ static UIStackView *QHCenteredCard(void) {
                                                     self.mutableActions.count, self.detail);
     self.contentBuilt=YES;
     self.content.navigationItem.title=@""; // The card owns the single visible heading.
+    if (self.dialogStyle==UIAlertControllerStyleActionSheet) [self setNavigationBarHidden:YES animated:NO];
     if (self.usesCenteredConfirmation) {
         [self buildCenteredConfirmation];
         return;
@@ -323,8 +347,9 @@ static UIStackView *QHCenteredCard(void) {
     }
     __weak typeof(self) weak=self;
     UIStackView *choices=nil;
+    QHDialogAction *menuCancel=nil;
     for (QHDialogAction *action in self.mutableActions) {
-        if (action.style==UIAlertActionStyleCancel && self.mutableActions.count>1) {
+        if (action.style==UIAlertActionStyleCancel && self.dialogStyle!=UIAlertControllerStyleActionSheet && self.mutableActions.count>1) {
             // Same plain spec as the app-wide secondary Button: accent text,
             // body type, 8/12 insets. Only the height stays at 44 because this
             // one lives inside the navigation bar.
@@ -350,21 +375,35 @@ static UIStackView *QHCenteredCard(void) {
             }] forControlEvents:UIControlEventTouchUpInside];
             self.content.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithCustomView:close];
         } else if (self.dialogStyle==UIAlertControllerStyleActionSheet) {
+            if (action.style==UIAlertActionStyleCancel) { menuCancel=action; continue; }
             if (!choices) {
-                choices=QHVCard();
-                choices.layer.cornerRadius=18;
-                choices.layoutMargins=UIEdgeInsetsMake(18,18,18,18);
+                // P2 menu: rows sit directly on the sheet background, not in
+                // another white card. Separators only between rows.
+                choices=[UIStackView new];
+                choices.axis=UILayoutConstraintAxisVertical;
+                choices.spacing=0;
                 choices.accessibilityIdentifier=@"qh.dialog.choices";
                 [stack addArrangedSubview:choices];
             }
             if (choices.arrangedSubviews.count) [choices addArrangedSubview:QHVSeparator()];
-            [choices addArrangedSubview:QHVRow(action.title,nil,action.style==UIAlertActionStyleDestructive ? @"trash" : @"circle",nil,
-                action.style==UIAlertActionStyleDestructive,YES,^{ [weak chooseAction:action]; })];
+            UIControl *menuRow=QHVRow(action.title,nil,action.style==UIAlertActionStyleDestructive ? @"trash" : @"circle",nil,
+                action.style==UIAlertActionStyleDestructive,YES,^{ [weak chooseAction:action]; });
+            [menuRow.heightAnchor constraintGreaterThanOrEqualToConstant:52].active=YES;
+            [choices addArrangedSubview:menuRow];
         } else {
             // Same filled spec, insets and height as the compact confirmation's
             // primary action: one button language across every dialog.
             [stack addArrangedSubview:QHConfirmButton(action,YES,self)];
         }
+    }
+    if (menuCancel) {
+        // P2 menu: cancel is its own group below the list, a text button,
+        // not a navigation-bar close and not another filled action.
+        UIStackView *cancelGroup=[UIStackView new];
+        cancelGroup.axis=UILayoutConstraintAxisVertical;
+        cancelGroup.accessibilityIdentifier=@"qh.dialog.cancel";
+        [cancelGroup addArrangedSubview:QHConfirmButton(menuCancel,NO,self)];
+        [stack addArrangedSubview:cancelGroup];
     }
 }
 @end

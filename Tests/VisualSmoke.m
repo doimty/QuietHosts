@@ -523,7 +523,7 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
         if (stage==0) {
             Check([presented isKindOfClass:QHDialogController.class] && [((UINavigationController *)presented).topViewController.title isEqual:NSLocalizedString(@"Add source",nil)],@"Add first source routes to chooseImport, not apply or an implicit URL download");
             UIView *choices=FindID(presented.view,@"qh.dialog.choices");
-            Check(CountID(presented.view,@"qh.dialog.choices")==1 && CountClass(choices,UIControl.class)>=3,@"real import choices share one grouped card");
+            Check(CountID(presented.view,@"qh.dialog.choices")==1 && CountClass(choices,UIControl.class)>=3,@"real import choices share one menu list");
         } else if (stage<3) {
             Check([presented isKindOfClass:QHDialogController.class] && ((QHDialogController *)presented).usesCenteredConfirmation,@"real enable/disable uses its original short confirmation");
         } else {

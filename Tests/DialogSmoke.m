@@ -518,7 +518,11 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
             [self check:dialog.navigationBarHidden name:@"short confirmation hides navigation chrome"];
         } else {
             [self check:dialog.sheetPresentationController.prefersGrabberVisible name:@"sheet chrome"];
-            [self check:[dialog.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierLarge] name:@"correct opening detent without manual dragging"];
+            BOOL menuDetent=[dialog.sheetPresentationController.selectedDetentIdentifier isEqual:@"qh.menu"] ||
+                             [dialog.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierMedium];
+            BOOL expectedDetent=stage==2 ? menuDetent :
+                [dialog.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierLarge];
+            [self check:expectedDetent name:@"correct opening detent without manual dragging"];
         }
         [self check:self.confirmed+self.cancelled==stage name:@"presentation has no implicit action"];
         if(stage>=4) {
@@ -615,7 +619,11 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(.3*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
         UIViewController *first=self.presenter.presentedViewController;
         [self check:[first isKindOfClass:QHDialogController.class] name:@"controller uses unified dialog"];
-        [self check:[first.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierLarge] name:@"real import and diagnostics open expanded without a swipe"];
+        BOOL importMenuDetent=[first.sheetPresentationController.selectedDetentIdentifier isEqual:@"qh.menu"] ||
+                                 [first.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierMedium];
+        BOOL importOrDiagnosticsDetent=flow==0 ? importMenuDetent :
+            [first.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierLarge];
+        [self check:importOrDiagnosticsDetent name:@"real import and diagnostics open expanded without a swipe"];
         if(flow==0 || flow==2) [self snapshot:first.view name:flow==0 ? @"dialog-real-import-expanded.png" : @"dialog-real-diagnostics-expanded.png"];
         if(flow==0) {
             [self check:[[self.controller valueForKey:@"busy"] boolValue] name:@"import owns busy until explicit cancel"];

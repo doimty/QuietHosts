@@ -1,6 +1,6 @@
 # Native18 · 弹窗重做规划
 
-> 状态：P1 已通过云端（native18）。随后修复标签切换闪烁并统一弹窗文字块/按钮规格（`0.1.0-1+native19`）。P2/P3 未开始。native17 已交付（[DELIVERY.md](../../deliverables/quiethosts/native17/DELIVERY.md)）。
+> 状态：P1 已通过云端（native18）。随后修复标签切换闪烁并统一弹窗文字块/按钮规格（`0.1.0-1+native19`）。P2 已在本地 `feat/native34-home-dialog-ui` 落地（菜单列表直接贴 sheet、独立取消组、iOS16+ 自定义内容高度 detent / iOS15 medium 回落），待 CI 烟雾验证；P3 未开始。native17 已交付（[DELIVERY.md](../../deliverables/quiethosts/native17/DELIVERY.md)）。
 > 基线：`feat/havoc-native17-polish` / `a64ee6f`；两份 native17 候选包已在云端通过。
 > 许可边界：只参考公开开源项目的**交互与排版**，不复制源码。Signal iOS 为 AGPL-3.0-only、Telegram 未核实统一根许可证，均不得进入本 MIT 项目；Wikipedia iOS 为 MIT，仍是"参考"而非搬运。
 
