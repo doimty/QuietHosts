@@ -15,7 +15,7 @@ static UIColor *VColor(unsigned light, unsigned dark) {
                                 blue:(rgb & 255) / 255.0 alpha:1];
     }];
 }
-UIColor *QHVBackgroundColor(void) { return VColor(0xf4f3f8, 0x121218); }
+UIColor *QHVBackgroundColor(void) { return VColor(0xe9e7f0, 0x0e0e13); }
 UIColor *QHVCardColor(void) { return VColor(0xffffff, 0x1c1c24); }
 UIColor *QHVInnerColor(void) { return VColor(0xf5f3fb, 0x252430); }
 UIColor *QHVAccentColor(void) { return VColor(0x5644cc, 0xaba0ff); }
@@ -93,6 +93,13 @@ typedef NS_ENUM(NSUInteger, QHVSurfaceStyle) {
 - (void)setSurfaceStyle:(QHVSurfaceStyle)surfaceStyle {
     _surfaceStyle = surfaceStyle;
     [self updateChrome];
+    if (surfaceStyle == QHVSurfaceStyleHero) {
+        // The managed-state hero is the one card that must read first on Home:
+        // larger radius and breathing room, no shadow, no new hue.
+        self.layer.cornerRadius = 22;
+        self.layoutMargins = UIEdgeInsetsMake(18, 18, 18, 18);
+        self.spacing = 10;
+    }
 }
 - (void)updateChrome {
     self.backgroundColor = self.surfaceStyle == QHVSurfaceStyleHero ? VHero() :
@@ -260,7 +267,8 @@ UIView *QHVBrandHeader(NSString *title, NSString *state, BOOL positive, NSString
      * appearances and has no intrinsic-size arbitration to get wrong. */
     (void)positive;
     UIStackView *text = VStack();
-    UILabel *brand = VTypeLabel(title, UIFontTextStyleTitle1, 25, UIFontWeightBold, NO);
+    text.spacing = 6;
+    UILabel *brand = VTypeLabel(title, UIFontTextStyleTitle1, 28, UIFontWeightBold, NO);
     brand.textColor = QHVAccentColor();
     brand.accessibilityTraits |= UIAccessibilityTraitHeader;
     [text addArrangedSubview:brand];
@@ -282,7 +290,7 @@ UIStackView *QHVStatusCard(NSString *title, NSString *state, NSString *detail,
     UIColor *tint = attention ? VAttention() : (active ? QHVAccentColor() : QHVSecondaryTextColor());
     UIColor *tile = attention ? VAttentionBackground() : (active ? VTile() : QHVInnerColor());
     [header addArrangedSubview:VIconTile(attention ? @"exclamationmark.shield"
-                                                  : (active ? @"checkmark.shield" : @"shield"), NO, tint, tile)];
+                                                  : (active ? @"checkmark.shield" : @"shield"), YES, tint, tile)];
     UIStackView *text = VStack();
     text.spacing = 4;
     // Status chip rides beside the state at normal sizes and drops to its own

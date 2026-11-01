@@ -524,6 +524,7 @@ static BOOL Animate(void) {
 - (void)drawHome {
     __weak typeof(self) weak = self;
     UIStackView *home = self.pages[0].stack;
+    home.spacing = 16;
     BOOL writable = [self statusWritable:self.status];
     BOOL active = writable && [self.status[@"state"] isEqual:@"active"];
     BOOL inactive = writable && [self.status[@"state"] isEqual:@"inactive"];
@@ -562,6 +563,7 @@ static BOOL Animate(void) {
         active ? QHL(@"Managed domains") : QHL(@"Saved domains"), managedCount,
         mainSwitch, active, self.status != nil && !writable);
     [home addArrangedSubview:managed];
+    [home setCustomSpacing:20 afterView:managed];
 
     if (self.storeError) {
         UIStackView *failure = QHVCard();
@@ -594,6 +596,7 @@ static BOOL Animate(void) {
         apply.accessibilityIdentifier = @"qh.draft.apply";
         [draftCard addArrangedSubview:apply];
         [home addArrangedSubview:draftCard];
+        [home setCustomSpacing:8 afterView:draftCard];
         /* Secondary facts stay out of the card: the card carries the decision,
          * the footnote carries reference detail. The confirmation state keeps
          * its own line so it stays a distinct, assertable status. */
@@ -620,7 +623,9 @@ static BOOL Animate(void) {
             [home addArrangedSubview:tip];
         }
     }
-    [home addArrangedSubview:QHVSection(QHL(@"Quick actions"))];
+    UILabel *quickActionsHeading = QHVSection(QHL(@"Quick actions"));
+    [home addArrangedSubview:quickActionsHeading];
+    [home setCustomSpacing:8 afterView:quickActionsHeading];
     UIStackView *actions = QHVCard();
     if (self.download) {
         [actions addArrangedSubview:QHVCommandRow(QHL(@"Cancel download"), QHL(@"Saved source snapshots are kept."),

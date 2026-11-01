@@ -204,6 +204,7 @@ static UIStackView *QHCenteredCard(void) {
         [canvas.heightAnchor constraintGreaterThanOrEqualToAnchor:scroll.frameLayoutGuide.heightAnchor]
     ]];
     UIStackView *card=QHCenteredCard();
+    card.layoutMargins=UIEdgeInsetsMake(20,20,20,20);
     card.accessibilityIdentifier=@"qh.dialog.confirm";
     [canvas addSubview:card];
     UIView *textBlock=QHConfirmTextBlock(self.content.title,self.detail);
@@ -223,7 +224,7 @@ static UIStackView *QHCenteredCard(void) {
     // A lone acknowledgement is the decision itself, so it stays filled; only a
     // paired escape is demoted to text.
     if (cancel) [card addArrangedSubview:QHConfirmButton(cancel,!primary,self)];
-    [card setCustomSpacing:18 afterView:textBlock];
+    [card setCustomSpacing:20 afterView:textBlock];
     CGFloat width=MIN(320.0, CGRectGetWidth(UIScreen.mainScreen.bounds)-64.0);
     [NSLayoutConstraint activateConstraints:@[
         [card.centerXAnchor constraintEqualToAnchor:canvas.centerXAnchor],
@@ -267,7 +268,7 @@ static UIStackView *QHCenteredCard(void) {
     scroll.translatesAutoresizingMaskIntoConstraints=NO;
     scroll.keyboardDismissMode=UIScrollViewKeyboardDismissModeInteractive;
     [view addSubview:scroll];
-    UIStackView *stack=[UIStackView new];stack.axis=UILayoutConstraintAxisVertical;stack.spacing=14;
+    UIStackView *stack=[UIStackView new];stack.axis=UILayoutConstraintAxisVertical;stack.spacing=16;
     stack.translatesAutoresizingMaskIntoConstraints=NO;[scroll addSubview:stack];
     [NSLayoutConstraint activateConstraints:@[
         [scroll.topAnchor constraintEqualToAnchor:view.safeAreaLayoutGuide.topAnchor],
@@ -284,11 +285,13 @@ static UIStackView *QHCenteredCard(void) {
     // 16pt card corner as the compact confirmation.
     UIStackView *intro=QHVCard();
     intro.layer.cornerRadius=18;
+    intro.layoutMargins=UIEdgeInsetsMake(18,18,18,18);
     [intro addArrangedSubview:QHConfirmTextBlock(self.content.title,self.detail)];
     [stack addArrangedSubview:intro];
     if (self.mutableFields.count) {
         UIStackView *inputs=QHVCard();
         inputs.layer.cornerRadius=18;
+        inputs.layoutMargins=UIEdgeInsetsMake(18,18,18,18);
         for (UITextField *field in self.mutableFields) {
             UILabel *label=[UILabel new];label.text=field.accessibilityLabel ?: field.placeholder;
             label.numberOfLines=0;label.font=[UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
@@ -350,6 +353,7 @@ static UIStackView *QHCenteredCard(void) {
             if (!choices) {
                 choices=QHVCard();
                 choices.layer.cornerRadius=18;
+                choices.layoutMargins=UIEdgeInsetsMake(18,18,18,18);
                 choices.accessibilityIdentifier=@"qh.dialog.choices";
                 [stack addArrangedSubview:choices];
             }
