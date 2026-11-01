@@ -161,6 +161,29 @@ static UIButton *QHConfirmButton(QHDialogAction *action, BOOL primary, QHDialogC
     return button;
 }
 
+// P3 form body: no title card. The navigation bar owns the title; the page
+// body is split by blank lines into paragraphs with 12pt between them.
+static UIStackView *QHFormBodyBlock(NSString *detail) {
+    UIStackView *body=[UIStackView new];
+    body.axis=UILayoutConstraintAxisVertical;
+    body.spacing=12;
+    body.accessibilityIdentifier=@"qh.dialog.body";
+    for (NSString *paragraph in [detail componentsSeparatedByString:@"\n\n"]) {
+        if (!paragraph.length) continue;
+        UILabel *label=[UILabel new];
+        label.text=paragraph;
+        label.numberOfLines=0;
+        label.adjustsFontForContentSizeCategory=YES;
+        label.font=[[UIFontMetrics metricsForTextStyle:UIFontTextStyleSubheadline]
+            scaledFontForFont:[UIFont systemFontOfSize:15 weight:UIFontWeightRegular]];
+        label.textColor=QHVSecondaryTextColor();
+        [body addArrangedSubview:label];
+    }
+    body.isAccessibilityElement=YES;
+    body.accessibilityLabel=detail;
+    return body;
+}
+
 static UIStackView *QHCenteredCard(void) {
     UIStackView *card=QHVCard();
     card.translatesAutoresizingMaskIntoConstraints=NO;
@@ -282,6 +305,7 @@ static UIStackView *QHCenteredCard(void) {
     self.contentBuilt=YES;
     self.content.navigationItem.title=@""; // The card owns the single visible heading.
     if (self.dialogStyle==UIAlertControllerStyleActionSheet) [self setNavigationBarHidden:YES animated:NO];
+    if (self.dialogStyle!=UIAlertControllerStyleActionSheet) self.content.navigationItem.title=self.content.title;
     if (self.usesCenteredConfirmation) {
         [self buildCenteredConfirmation];
         return;
@@ -305,17 +329,22 @@ static UIStackView *QHCenteredCard(void) {
         [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor constant:-18],
         [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-36]
     ]];
-    // Every dialog is text-first: the same title/body block and the same
-    // 16pt card corner as the compact confirmation.
-    UIStackView *intro=QHVCard();
-    intro.layer.cornerRadius=18;
-    intro.layoutMargins=UIEdgeInsetsMake(18,18,18,18);
-    [intro addArrangedSubview:QHConfirmTextBlock(self.content.title,self.detail)];
-    [stack addArrangedSubview:intro];
+    // Every dialog is text-first. Menus keep the title card; form and long
+    // content dialogs put the title in the navigation bar and the body
+    // directly on the sheet, so there is no title card plus input card.
+    if (self.dialogStyle==UIAlertControllerStyleActionSheet) {
+        UIStackView *intro=QHVCard();
+        intro.layer.cornerRadius=18;
+        intro.layoutMargins=UIEdgeInsetsMake(18,18,18,18);
+        [intro addArrangedSubview:QHConfirmTextBlock(self.content.title,self.detail)];
+        [stack addArrangedSubview:intro];
+    } else {
+        [stack addArrangedSubview:QHFormBodyBlock(self.detail)];
+    }
     if (self.mutableFields.count) {
-        UIStackView *inputs=QHVCard();
-        inputs.layer.cornerRadius=18;
-        inputs.layoutMargins=UIEdgeInsetsMake(18,18,18,18);
+        UIStackView *inputs=[UIStackView new];
+        inputs.axis=UILayoutConstraintAxisVertical;
+        inputs.spacing=16;
         for (UITextField *field in self.mutableFields) {
             UILabel *label=[UILabel new];label.text=field.accessibilityLabel ?: field.placeholder;
             label.numberOfLines=0;label.font=[UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
@@ -342,6 +371,7 @@ static UIStackView *QHCenteredCard(void) {
                 [holder.heightAnchor constraintGreaterThanOrEqualToConstant:44]
             ]];
             [inputs addArrangedSubview:label];[inputs addArrangedSubview:holder];
+            [inputs setCustomSpacing:8 afterView:label];
         }
         [stack addArrangedSubview:inputs];
     }

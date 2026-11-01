@@ -119,6 +119,13 @@ def check(dialog, controller, components=None):
     assert choices.index('UIAlertActionStyleCancel') < choices.index('self.dialogStyle==UIAlertControllerStyleActionSheet')
     assert 'self.content.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithCustomView:close]' in choices
     assert 'QHDialogAction *menuCancel=nil;' in choices
+    # P3 form: title lives in the navigation bar, body paragraphs sit on the
+    # sheet, inputs are plain page groups with label 8pt above the holder.
+    assert 'self.content.navigationItem.title=self.content.title;' in appearance
+    assert 'QHFormBodyBlock(self.detail)' in dialog
+    assert 'qh.dialog.body' in dialog
+    assert 'UIStackView *inputs=[UIStackView new];' in appearance and 'inputs=QHVCard();' not in appearance
+    assert 'setCustomSpacing:8 afterView:label' in appearance
     assert 'QHConfirmButton(menuCancel,NO,self)' in choices, 'Menu cancel is a text button in its own group'
     assert 'cancelGroup.accessibilityIdentifier=@\"qh.dialog.cancel\";' in choices
     assert '[close.heightAnchor constraintGreaterThanOrEqualToConstant:44]' in choices
@@ -182,6 +189,8 @@ def main():
         ('QHVPrimaryForegroundColor()', 'QHVAccentColor()'),
         ('if (!choices) {', 'if (YES) {'),
         ('choices=[UIStackView new];', 'choices=QHVCard();'),
+        ('QHFormBodyBlock(self.detail)', 'QHConfirmTextBlock(self.content.title,self.detail)'),
+        ('self.content.navigationItem.title=self.content.title;', 'self.content.navigationItem.title=@"";'),
         ('QHConfirmButton(menuCancel,NO,self)', 'QHConfirmButton(menuCancel,YES,self)'),
         ('constraintGreaterThanOrEqualToConstant:52', 'constraintGreaterThanOrEqualToConstant:44'),
         ('choices.accessibilityIdentifier=@"qh.dialog.choices";', ''),

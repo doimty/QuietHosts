@@ -523,6 +523,9 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
             BOOL expectedDetent=stage==2 ? menuDetent :
                 [dialog.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierLarge];
             [self check:expectedDetent name:@"correct opening detent without manual dragging"];
+            NSString *navTitle=dialog.topViewController.navigationItem.title;
+            BOOL expectedNavTitle=stage==2 ? navTitle.length==0 : [navTitle isEqual:@"统一弹层 / Modal test"];
+            [self check:expectedNavTitle name:@"form sheet shows its title in the navigation bar, menu hides the empty bar"];
         }
         [self check:self.confirmed+self.cancelled==stage name:@"presentation has no implicit action"];
         if(stage>=4) {
