@@ -706,14 +706,19 @@ static BOOL Animate(void) {
 }
 - (void)renderRules {
     UIStackView *rules = self.pages[1].stack;
+    rules.spacing = 16;
     __weak typeof(self) weak = self;
     // Same masthead as Home: one page-header pattern for every tab.
     NSString *rulesTagline = self.draft
         ? [NSString stringWithFormat:QHL(@"%@ sources · %@ domains"),
               Number([self.draft.document[@"sources"] count]), Number(self.draft.compiled.domains.count)]
         : QHL(@"Local rules must load first");
-    [rules addArrangedSubview:QHVBrandHeader(QHL(@"Rules"), rulesTagline, NO, nil)];
-    [rules addArrangedSubview:QHVSection(QHL(@"Rule sources"))];
+    UIView *rulesMasthead = QHVBrandHeader(QHL(@"Rules"), rulesTagline, NO, nil);
+    [rules addArrangedSubview:rulesMasthead];
+    [rules setCustomSpacing:20 afterView:rulesMasthead];
+    UILabel *rulesSourcesHeading = QHVSection(QHL(@"Rule sources"));
+    [rules addArrangedSubview:rules12Heading];
+    [rules setCustomSpacing:8 afterView:rulesSourcesHeading];
     if (!self.draft) {
         [rules addArrangedSubview:QHVNote(QHL(@"Local storage must load successfully before you can change rules."), @"exclamationmark.triangle")];
         return;
@@ -740,12 +745,16 @@ static BOOL Animate(void) {
     [list addArrangedSubview:QHVRow(QHL(@"Add source"), QHL(@"URL, local file or pasted text"), @"plus", nil,
         NO, !self.busy && sources.count < QHMaximumSources, ^{ [weak chooseImport:NO]; })];
     [rules addArrangedSubview:list];
-    [rules addArrangedSubview:QHVSection(QHL(@"Allowlist"))];
+    UILabel *rulesAllowlistHeading = QHVSection(QHL(@"Allowlist"));
+    [rules addArrangedSubview:rules9Heading];
+    [rules setCustomSpacing:8 afterView:rulesAllowlistHeading];
     UIStackView *allow = QHVCard();
     [allow addArrangedSubview:QHVRow(QHL(@"Exact allowlist"), QHL(@"Only exact domains are excluded from our generated blocklist."),
         @"checkmark", Number(self.draft.allowlistCount), NO, !self.busy, ^{ [weak chooseImport:YES]; })];
     [rules addArrangedSubview:allow];
-    [rules addArrangedSubview:QHVSection(QHL(@"Rule formats"))];
+    UILabel *rulesFormatsHeading = QHVSection(QHL(@"Rule formats"));
+    [rules addArrangedSubview:rules12Heading];
+    [rules setCustomSpacing:8 afterView:rulesFormatsHeading];
     UIStackView *formats = QHVCard();
     [formats addArrangedSubview:QHVInfo(QHL(@"Exact DOMAIN / HOST"), QHL(@"Hosts entries, bare domains and exact blocking domain rules."),
         @"shippingbox", nil)];
@@ -799,16 +808,23 @@ static BOOL Animate(void) {
 }
 - (void)renderSettings {
     UIStackView *settings = self.pages[2].stack;
+    settings.spacing = 16;
     __weak typeof(self) weak = self;
     // Same masthead as Home and Rules.
-    [settings addArrangedSubview:QHVBrandHeader(QHL(@"Settings"), QHL(@"Appearance, files and help"), NO, nil)];
-    [settings addArrangedSubview:QHVSection(QHL(@"Appearance"))];
+    UIView *settingsMasthead = QHVBrandHeader(QHL(@"Settings"), QHL(@"Appearance, files and help"), NO, nil);
+    [settings addArrangedSubview:settingsMasthead];
+    [settings setCustomSpacing:20 afterView:settingsMasthead];
+    UILabel *settingsAppearanceHeading = QHVSection(QHL(@"Appearance"));
+    [settings addArrangedSubview:settingsAppearanceHeading];
+    [settings setCustomSpacing:8 afterView:settingsAppearanceHeading];
     UIStackView *appearance = QHVCard();
     [appearance addArrangedSubview:QHVRow(QHL(@"Theme"), self.themeTitle, @"paintpalette", nil, NO, YES, ^{
         [weak showThemePicker];
     })];
     [settings addArrangedSubview:appearance];
-    [settings addArrangedSubview:QHVSection(QHL(@"Rules and files"))];
+    UILabel *settingsFilesHeading = QHVSection(QHL(@"Rules and files"));
+    [settings addArrangedSubview:settingsFilesHeading];
+    [settings setCustomSpacing:8 afterView:settingsFilesHeading];
     UIStackView *data = QHVCard();
     [data addArrangedSubview:QHVCommandRow(QHL(@"Update online sources"),
         QHL(@"All online sources, including excluded ones. Updates change the draft only."),
@@ -827,7 +843,9 @@ static BOOL Animate(void) {
         @"info.circle", nil, NO, !self.busy, ^{ [weak showDiagnostics:YES]; })];
     [settings addArrangedSubview:data];
     if ([self statusWritable:self.status] && [self.status[@"state"] isEqual:@"active"]) {
-        [settings addArrangedSubview:QHVSection(QHL(@"Rule control"))];
+        UILabel *ruleControlHeading = QHVSection(QHL(@"Rule control"));
+        [settings addArrangedSubview:ruleControlHeading];
+        [settings setCustomSpacing:8 afterView:ruleControlHeading];
         UIStackView *restore = QHVCard();
         [restore addArrangedSubview:QHVCommandRow(QHL(@"Pause rules and restore original Hosts"),
             QHL(@"Keeps local sources; restores only the verified baseline."), @"trash", nil, YES, !self.busy, ^{
@@ -835,13 +853,17 @@ static BOOL Animate(void) {
             })];
         [settings addArrangedSubview:restore];
     } else if ([self statusWritable:self.status] && [self.status[@"state"] isEqual:@"inactive"]) {
-        [settings addArrangedSubview:QHVSection(QHL(@"Rule control"))];
+        UILabel *ruleControlHeading = QHVSection(QHL(@"Rule control"));
+        [settings addArrangedSubview:ruleControlHeading];
+        [settings setCustomSpacing:8 afterView:ruleControlHeading];
         UIStackView *resume = QHVCard();
         [resume addArrangedSubview:QHVCommandRow(QHL(@"Resume saved rules"), QHL(@"This does not apply local draft changes."),
             @"play.circle", nil, NO, !self.busy, ^{ [weak prepareHelperCommand:@"enable"]; })];
         [settings addArrangedSubview:resume];
     }
-    [settings addArrangedSubview:QHVSection(QHL(@"Help and privacy"))];
+    UILabel *settingsHelpHeading = QHVSection(QHL(@"Help and privacy"));
+    [settings addArrangedSubview:settingsHelpHeading];
+    [settings setCustomSpacing:8 afterView:settingsHelpHeading];
     UIStackView *help = QHVCard();
     [help addArrangedSubview:QHVRow(QHL(@"Using QuietHosts"), QHL(@"Import, review, apply. Restore when needed."),
         @"book.closed", nil, NO, !self.busy, ^{ [weak showUsageGuide]; })];
@@ -852,7 +874,9 @@ static BOOL Animate(void) {
     [help addArrangedSubview:QHVRow(QHL(@"Project and support"), QHL(@"Opens GitHub. No report is sent automatically."),
         @"bubble.left.and.bubble.right", nil, NO, !self.busy, ^{ [weak openProjectSupport]; })];
     [settings addArrangedSubview:help];
-    [settings addArrangedSubview:QHVSection(QHL(@"About"))];
+    UILabel *settingsAboutHeading = QHVSection(QHL(@"About"));
+    [settings addArrangedSubview:settingsAboutHeading];
+    [settings setCustomSpacing:8 afterView:settingsAboutHeading];
     UIStackView *about = QHVCard();
     NSBundle *bundle = NSBundle.mainBundle;
     NSString *version = [NSString stringWithFormat:@"%@ (%@)",
