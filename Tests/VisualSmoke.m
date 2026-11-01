@@ -585,6 +585,20 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
         Check(Writes==0,@"no file/DNS commands and no implicit confirmation");
         Check(Downloads==0,@"no implicit source download across rendering, navigation, appearance, consent or cancel");
         [self.controller.rootController dismissViewControllerAnimated:NO completion:^{
+            // P4 toast check: visible and non-blocking on the real controller
+            // view, a second toast replaces the first, and it is gone after
+            // its 3.0s lifetime (checked at 3.4s, before dialog smoke runs).
+            UIView *toastHost = self.controller.rootController.view;
+            QHVShowToast(toastHost, NSLocalizedString(@"Saved locally · not applied", nil));
+            LayoutWindow(self.window);
+            UIView *toast = FindID(toastHost, @"qh.toast");
+            Check(toast != nil && !toast.userInteractionEnabled && CGRectGetHeight(toast.bounds) >= 44, @"toast is visible, non-blocking and at least 44pt tall");
+            Check(FindLabel(toast, NSLocalizedString(@"Saved locally · not applied", nil)) != nil, @"toast shows the saved-not-applied text");
+            QHVShowToast(toastHost, NSLocalizedString(@"Saved locally · not applied", nil));
+            LayoutWindow(self.window);
+            Check(CountID(toastHost, @"qh.toast") == 1, @"a second toast replaces the first instead of stacking");
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            Check(FindID(toastHost, @"qh.toast") == nil, @"toast removes itself after 3 seconds");
             QHSmokeProgress("dialog-smoke-start");
             QHRunDialogSmoke(self.controller,^(NSUInteger dialogChecks,NSUInteger dialogFailures) {
                 QHSmokeProgress("dialog-smoke-finished");
@@ -601,6 +615,7 @@ static void Screenshot(UIWindow *window, NSString *documents, NSString *name) {
                     writeToFile:[documents stringByAppendingPathComponent:@"result.json"] atomically:YES];
                 NSLog(@"QH_UI_SMOKE %@",report);
                 exit(Failures ? 1 : 0);
+            });
             });
         }];
     });

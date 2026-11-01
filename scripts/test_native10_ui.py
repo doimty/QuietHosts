@@ -140,6 +140,23 @@ def check(dialog, controller, components=None):
     assert 'accessibilityHint' not in row, 'Row subtitle must not be announced as a hint'
 
 
+    # P4: only the draft-saved success is a light toast. It must not
+    # intercept touches, must be at least 44pt tall, must use no scale or
+    # spring, and must remove itself after 3.0s. Failures and Hosts
+    # operation results stay in blocking dialogs.
+    toast_view = section(components, 'UIView *QHVToastView(NSString *text) {', 'void QHVShowToast')
+    toast_show = section(components, 'void QHVShowToast(UIView *host, NSString *text) {', '')
+    assert 'pill.accessibilityIdentifier = @"qh.toast";' in toast_view
+    assert 'pill.userInteractionEnabled = NO;' in toast_view
+    assert 'constraintGreaterThanOrEqualToConstant:44' in toast_view
+    assert 'CGAffineTransformMakeScale' not in toast_view and 'usingSpringWithDamping' not in toast_view
+    assert '(3.0 * NSEC_PER_SEC)' in toast_show
+    assert 'removeFromSuperview' in toast_show
+    assert 'QHVShowToast(weak.rootController.view, QHL(@"Saved locally · not applied"));' in controller
+    assert 'QHL(@"Nothing saved") detail:error.localizedDescription' in controller
+    assert '[self message:title detail:detail];' in controller
+
+
 def check_icon(path, size):
     raw = path.read_bytes()
     assert raw[:8] == b'\x89PNG\r\n\x1a\n'
@@ -242,7 +259,12 @@ def main():
                      'centered card model transform never scales on entrance',
                      'centered card presentation layer never springs while dismissing'):
         assert required in smoke, required
-    assert 'QHRunDialogSmoke(self.controller,' in (ROOT / 'Tests/VisualSmoke.m').read_text(encoding='utf-8')
+    visual = (ROOT / 'Tests/VisualSmoke.m').read_text(encoding='utf-8')
+    assert 'QHRunDialogSmoke(self.controller,' in visual
+    for required in ('qh.toast', 'toast removes itself after 3 seconds',
+                     'a second toast replaces the first instead of stacking',
+                     'toast is visible, non-blocking and at least 44pt tall'):
+        assert required in visual, required
     driver = (ROOT / 'ci/visual_smoke.py').read_text(encoding='utf-8')
     assert 'Tests/DialogSmoke.m' in driver
     assert "'-framework','QuartzCore'" in driver

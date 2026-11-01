@@ -496,3 +496,54 @@ UIView *QHVSeparator(void) {
     line.isAccessibilityElement = NO;
     return line;
 }
+UIView *QHVToastView(NSString *text) {
+    UIView *pill = [UIView new];
+    pill.backgroundColor = QHVPrimaryTextColor();
+    pill.layer.cornerRadius = 22;
+    pill.layer.masksToBounds = YES;
+    pill.userInteractionEnabled = NO;
+    pill.accessibilityIdentifier = @"qh.toast";
+    pill.isAccessibilityElement = YES;
+    pill.accessibilityLabel = text;
+    UILabel *label = VTypeLabel(text, UIFontTextStyleSubheadline, 15, UIFontWeightSemibold, NO);
+    label.textColor = QHVPrimaryForegroundColor();
+    label.textAlignment = NSTextAlignmentCenter;
+    label.userInteractionEnabled = NO;
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    [pill addSubview:label];
+    [NSLayoutConstraint activateConstraints:@[
+        [label.topAnchor constraintEqualToAnchor:pill.topAnchor constant:12],
+        [label.bottomAnchor constraintEqualToAnchor:pill.bottomAnchor constant:-12],
+        [label.leadingAnchor constraintEqualToAnchor:pill.leadingAnchor constant:20],
+        [label.trailingAnchor constraintEqualToAnchor:pill.trailingAnchor constant:-20],
+        [pill.heightAnchor constraintGreaterThanOrEqualToConstant:44],
+    ]];
+    return pill;
+}
+void QHVShowToast(UIView *host, NSString *text) {
+    if (!host || text.length == 0) return;
+    for (UIView *old in host.subviews.copy) {
+        if ([old.accessibilityIdentifier isEqual:@"qh.toast"]) [old removeFromSuperview];
+    }
+    UIView *toast = QHVToastView(text);
+    toast.translatesAutoresizingMaskIntoConstraints = NO;
+    [host addSubview:toast];
+    [NSLayoutConstraint activateConstraints:@[
+        [toast.centerXAnchor constraintEqualToAnchor:host.centerXAnchor],
+        [toast.bottomAnchor constraintEqualToAnchor:host.safeAreaLayoutGuide.bottomAnchor constant:-24],
+        [toast.leadingAnchor constraintGreaterThanOrEqualToAnchor:host.leadingAnchor constant:16],
+        [toast.trailingAnchor constraintLessThanOrEqualToAnchor:host.trailingAnchor constant:-16],
+    ]];
+    [host layoutIfNeeded];
+    toast.alpha = 0;
+    [UIView animateWithDuration:0.25 animations:^{ toast.alpha = 1; }];
+    __weak UIView *weakToast = toast;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UIView *current = weakToast;
+        if (!current || !current.superview) return;
+        [UIView animateWithDuration:0.25 animations:^{ current.alpha = 0; } completion:^(BOOL finished) {
+            (void)finished;
+            [current removeFromSuperview];
+        }];
+    });
+}

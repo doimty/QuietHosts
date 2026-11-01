@@ -30,3 +30,9 @@ UIView *QHVFormRow(NSString *title, NSString *value);
 UIView *QHVNote(NSString *text, NSString *symbol);
 UILabel *QHVSection(NSString *title);
 UIView *QHVSeparator(void);
+// P4 light feedback: a non-blocking pill that sits on the host view, never
+// intercepts touches, and removes itself after 3.0s. It replaces only
+// draft-saved success feedback; Hosts authorisations and errors stay in
+// blocking dialogs. No scale or spring animation is used.
+UIView *QHVToastView(NSString *text);
+void QHVShowToast(UIView *host, NSString *text);

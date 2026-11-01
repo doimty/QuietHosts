@@ -1080,9 +1080,16 @@ static BOOL Animate(void) {
                 weak.appliedHelperRevision = nil;
             }
             [weak finishBusy];
-            [weak message:saved ? QHL(@"Saved locally · not applied") : QHL(@"Nothing saved")
-                   detail:saved ? QHL(@"Draft saved. Managed Hosts were not changed. Return to Home and choose Apply draft to install these rules.")
-                                : error.localizedDescription];
+            // P4: only the draft-saved success becomes a light toast. The
+            // short title already says it was not applied, and Home keeps
+            // showing the draft awaiting explicit Apply, so the long blocking
+            // explanation is not needed here. Failures stay blocking, and
+            // every Hosts authorisation / operation result stays blocking.
+            if (saved) {
+                QHVShowToast(weak.rootController.view, QHL(@"Saved locally · not applied"));
+            } else {
+                [weak message:QHL(@"Nothing saved") detail:error.localizedDescription];
+            }
         });
     });
 }
