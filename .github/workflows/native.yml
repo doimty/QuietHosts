@@ -1,7 +1,7 @@
 name: QuietHosts native dual environment
 on:
   push:
-    branches: [feat/native-app, fix/device-layout-diagnostics, fix/reload-and-rule-import, fix/purple-ui-native8, feat/native9-html-ui, feat/native10-unified-dialogs, fix/native12-dependency-copy, feat/rootless-support, fix/roothide-rootfs-alias, fix/centered-confirmation-dialogs, feat/havoc-native17-polish, feat/native18-dialog-polish, feat/native34-home-dialog-polish]
+    branches: [feat/native-app, fix/device-layout-diagnostics, fix/reload-and-rule-import, fix/purple-ui-native8, feat/native9-html-ui, feat/native10-unified-dialogs, fix/native12-dependency-copy, feat/rootless-support, fix/roothide-rootfs-alias, fix/centered-confirmation-dialogs, feat/havoc-native17-polish, feat/native18-dialog-polish, feat/native34-home-dialog-ui]
   workflow_dispatch:
 permissions:
   contents: read
