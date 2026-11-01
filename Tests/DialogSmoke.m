@@ -619,8 +619,12 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
     [self check:![[self.controller valueForKey:@"busy"] boolValue] name:@"controller idle before next flow"];
     if(flow==2) [self.controller showDiagnostics:YES];
     else [self.controller chooseImport:NO];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(.3*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+    // First real presentation can still be animating at 0.3s, which is when
+    // the first import and diagnostics detent checks failed while later
+    // presentations of the same dialogs passed. Wait for the sheet to settle.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
         UIViewController *first=self.presenter.presentedViewController;
+        NSLog(@"QH_DIALOG controller flow detent=%@ flow=%lu",first.sheetPresentationController.selectedDetentIdentifier,(unsigned long)flow);
         [self check:[first isKindOfClass:QHDialogController.class] name:@"controller uses unified dialog"];
         BOOL importMenuDetent=[first.sheetPresentationController.selectedDetentIdentifier isEqual:@"qh.menu"] ||
                                  [first.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierMedium];

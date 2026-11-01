@@ -305,11 +305,14 @@ static UIStackView *QHCenteredCard(void) {
     self.contentBuilt=YES;
     self.content.navigationItem.title=@""; // The card owns the single visible heading.
     if (self.dialogStyle==UIAlertControllerStyleActionSheet) [self setNavigationBarHidden:YES animated:NO];
-    if (self.dialogStyle!=UIAlertControllerStyleActionSheet) self.content.navigationItem.title=self.content.title;
     if (self.usesCenteredConfirmation) {
         [self buildCenteredConfirmation];
         return;
     }
+    // P3 form title only: centered confirmations keep the empty navigation
+    // title, otherwise the card heading and the navigation title duplicate.
+    // Setting it here, after the centered return, is what guarantees that.
+    if (self.dialogStyle!=UIAlertControllerStyleActionSheet) self.content.navigationItem.title=self.content.title;
     UIView *view=self.content.view;
     view.backgroundColor=QHVBackgroundColor();
     UIScrollView *scroll=[UIScrollView new];
