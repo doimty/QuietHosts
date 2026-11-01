@@ -628,8 +628,12 @@ static QHDialogFieldArea *QHDialogInspectField(UITextField *field,BOOL hitTestPo
         [self check:[first isKindOfClass:QHDialogController.class] name:@"controller uses unified dialog"];
         BOOL importMenuDetent=[first.sheetPresentationController.selectedDetentIdentifier isEqual:@"qh.menu"] ||
                                  [first.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierMedium];
-        BOOL importOrDiagnosticsDetent=flow==0 ? importMenuDetent :
-            [first.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierLarge];
+        // Flows 0, 1 and 3 are the import menu; only flow 2 is diagnostics.
+        // The old flow==0 ternary made flows 1 and 3 expect a large sheet
+        // even though they open the same menu, which is exactly what the
+        // 41341579480 log proved: qh.menu at flows 0, 1 and 3, large at 2.
+        BOOL importOrDiagnosticsDetent=flow==2 ?
+            [first.sheetPresentationController.selectedDetentIdentifier isEqual:UISheetPresentationControllerDetentIdentifierLarge] : importMenuDetent;
         [self check:importOrDiagnosticsDetent name:@"real import and diagnostics open expanded without a swipe"];
         if(flow==0 || flow==2) [self snapshot:first.view name:flow==0 ? @"dialog-real-import-expanded.png" : @"dialog-real-diagnostics-expanded.png"];
         if(flow==0) {
